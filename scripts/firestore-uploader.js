@@ -13,10 +13,10 @@ admin.initializeApp({
 const db = admin.firestore();
 
 // Your API endpoints
-const API_BASE_URL = 'https://fantasyranker-adp-api.onrender.com/api/players';
+const API_BASE_URL = 'https://adp-server.onrender.com/api/players';
 const FORMATS = {
   'PPR': 'ppr',
-  'Half PPR': 'half', 
+  'Half PPR': 'halfppr', 
   'Standard': 'standard'
 };
 
@@ -43,8 +43,8 @@ async function uploadToFirestore(format, data) {
   try {
     console.log(`Uploading ${format} to Firestore...`);
     
-    // Store in collection 'consensus-data' with document name as format
-    const docRef = db.collection('consensus-data').doc(format.toLowerCase().replace(' ', '-'));
+    // Store in collection 'expert-consensus' with document name as format
+    const docRef = db.collection('expert-consensus').doc(format.toLowerCase().replace(' ', '-'));
     
     const firestoreData = {
       format: format,
