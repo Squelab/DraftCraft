@@ -564,14 +564,17 @@ function updatePositionFilterButton() {
 async function loadAllScoringFormats() {
     try {
         await Promise.all(cfg.formats.map(async format => {
-            const response = await fetch(`Player-Context/Expert-Consensus/${cfg.fileMap[format]}`);
-            if (response.ok) {
-                const data = await response.json();
-                const allPlayers = data.players || data;
+            const docName = format.toLowerCase().replace(' ', '-'); // 'ppr', 'half-ppr', 'standard'
+            const docRef = window.firebase.doc(window.firebase.db, 'expert-consensus', docName);
+            const docSnap = await window.firebase.getDoc(docRef);
+
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const allPlayers = data.players || [];
 
                 // Store ALL players for search functionality
                 state.allConsensusData[format] = {
-                    toggles: data.toggles, // Store toggles here
+                    toggles: data.toggles,
                     players: allPlayers.map((p, i) => ({
                         ...p,
                         id: p.id || `p${i}`,
@@ -598,13 +601,9 @@ async function loadAllScoringFormats() {
 
         state.currentFormat = 'PPR';
         updateScoringButton('PPR');
-
-        // REMOVED: loadPlayersFromConsensus(state.currentFormat);
-        // This will now be handled by initializeRankings()
-
     } catch (error) {
-        console.error('Error loading scoring formats:', error);
-        // Fallback to single file load
+        console.error('Error loading scoring formats from Firestore:', error);
+        // Fallback to single file load if needed
         await loadPlayersFromFile();
     }
 }
@@ -659,25 +658,48 @@ function syncToggleVisuals() {
     });
 }
 
+async function loadPlayersFromFile() {
+    const format = state.currentFormat || 'PPR';
+    const docName = format.toLowerCase().replace(' ', '-');
 
-function loadPlayersFromConsensus(format) {
-    if (!state.consensusData[format]) return;
+    try {
+        const docRef = window.firebase.doc(window.firebase.db, 'expert-consensus', docName);
+        const docSnap = await window.firebase.getDoc(docRef);
 
-    state.players = deepCopy(state.consensusData[format]);
+        if (docSnap.exists()) {
+            const d = docSnap.data();
+            const allPlayers = d.players || [];
 
-    // NEW: Load toggles from the data if they exist
-    if (state.allConsensusData[format] && state.allConsensusData[format].toggles) {
-        state.toggles = { ...state.toggles, ...state.allConsensusData[format].toggles };
-        syncToggleVisuals();
+            state.allConsensusData[format] = {
+                toggles: d.toggles,
+                players: allPlayers.map((p, i) => ({
+                    ...p,
+                    id: p.id || `p${i}`,
+                    risk: p.risk || 'Medium',
+                    notes: p.notes || '',
+                    originalRank: i + 1
+                }))
+            };
+
+            const skillPlayers = allPlayers
+                .filter(p => cfg.skillPositions.includes(p.position))
+                .slice(0, cfg.maxPlayers);
+
+            state.players = skillPlayers.map((p, i) => ({
+                ...p,
+                id: p.id || `p${i}`,
+                risk: p.risk || 'Medium',
+                notes: p.notes || '',
+                overallRank: i + 1
+            }));
+
+            recalculateRanks();
+            state.originalConsensus[format] = deepCopy(state.players);
+            filterPlayers();
+        }
+    } catch (error) {
+        console.error('Error loading from Firestore:', error);
     }
-
-    recalculateRanks();
-    state.originalConsensus[format] = deepCopy(state.players);
-
-    state.history.undoStack = [];
-    state.history.redoStack = [];
-    updateUndoRedoButtons();
-    filterPlayers();
 }
 
 function loadPlayersFromFile() {
