@@ -1,1 +1,17 @@
-
+{
+  "name": "draftcraft-scripts",
+  "version": "1.0.0",
+  "description": "Data pipeline scripts for DraftCraft",
+  "main": "firestore-uploader.js",
+  "scripts": {
+    "upload": "node firestore-uploader.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
