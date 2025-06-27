@@ -1,0 +1,61 @@
+name: Update ADP
+on:
+  schedule:
+    # Run every 48 hours (at 0:00, 6:00, 12:00, 18:00 UTC)
+    - cron: '0 */48 * * *'
+  workflow_dispatch: # Allows manual triggering from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  update-adp-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Create Player-Context/Expert-Consensus directory
+        run: mkdir -p Player-Context/Expert-Consensus
+        
+      - name: Fetch PPR data
+        run: |
+          echo "Fetching PPR data..."
+          curl -s "https://fantasyranker-adp-api.onrender.com/api/players/ppr" | jq '.players' > Player-Context/Expert-Consensus/PPR.json
+          
+      - name: Fetch Half PPR data
+        run: |
+          echo "Fetching Half PPR data..."
+          curl -s "https://fantasyranker-adp-api.onrender.com/api/players/half" | jq '.players' > Player-Context/Expert-Consensus/HPPR.json
+          
+      - name: Fetch Standard data
+        run: |
+          echo "Fetching Standard data..."
+          curl -s "https://fantasyranker-adp-api.onrender.com/api/players/standard" | jq '.players' > Player-Context/Expert-Consensus/STAN.json
+          
+      - name: Check if files were created
+        run: |
+          echo "Checking file sizes..."
+          ls -la Player-Context/Expert-Consensus/*.json
+          echo "PPR records: $(jq length Player-Context/Expert-Consensus/PPR.json)"
+          echo "Half PPR records: $(jq length Player-Context/Expert-Consensus/HPPR.json)"
+          echo "Standard records: $(jq length Player-Context/Expert-Consensus/STAN.json)"
+          
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Add timestamp to commit message
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+          git add Player-Context/Expert-Consensus/PPR.json Player-Context/Expert-Consensus/HPPR.json Player-Context/Expert-Consensus/STAN.json
+          
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update ADP data - $TIMESTAMP"
+            git push
+            echo "Successfully updated ADP data files"
+          fi
