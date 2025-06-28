@@ -46,7 +46,8 @@ let isMenuOpen = false;
 // Close menu on escape key
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && isMenuOpen) {
-        closeMenu();
+        const menuBtn = $('hamburgerMenuBtn');
+        if (menuBtn) menuBtn.click(); // Just trigger the button click
     }
 });
 
@@ -88,8 +89,6 @@ function setupHamburgerMenu() {
             }
         }
     });
-
-    updateNotesPositioning();
 }
 
 // Toggle Switch Functionality
@@ -126,7 +125,6 @@ function setupToggleSwitches() {
 
 // Apply display settings
 function applyDisplaySettings(setting, enabled) {
-
     switch (setting) {
         case 'adp':
             document.querySelectorAll('span').forEach(el => {
@@ -141,48 +139,22 @@ function applyDisplaySettings(setting, enabled) {
             } else {
                 document.body.classList.remove('risk-visible');
             }
-            updateNotesPositioning();
+            updateNotesPosition();
             break;
         case 'notes':
             if (enabled) {
                 document.body.classList.add('notes-visible');
+                updateNotesPosition(); 
             } else {
                 document.body.classList.remove('notes-visible');
+                document.querySelectorAll('.notes-icon').forEach(icon => {
+                    icon.style.transform = 'translateX(0)';
+                });
             }
             break;
         case 'tiers':
             break;
     }
-}
-
-function updateNotesPositioning() {
-    document.querySelectorAll('.player-item').forEach(playerItem => {
-        const notesSection = playerItem.querySelector('.notes-section');
-        const notesIcon = playerItem.querySelector('.notes-icon');
-
-        // Use state instead of reading CSS classes
-        const isRiskDisabled = !state.toggles.risk;
-
-        if (notesSection) {
-            if (isRiskDisabled) {
-                notesSection.style.transform = 'translateX(44px)';
-                notesSection.style.zIndex = '10';
-            } else {
-                notesSection.style.transform = 'translateX(0)';
-                notesSection.style.zIndex = '1';
-            }
-        }
-
-        if (notesIcon) {
-            if (isRiskDisabled) {
-                notesIcon.style.transform = 'translateX(44px)';
-                notesIcon.style.zIndex = '10';
-            } else {
-                notesIcon.style.transform = 'translateX(0)';
-                notesIcon.style.zIndex = '1';
-            }
-        }
-    });
 }
 
 function updateDynamicTitle() {
@@ -228,7 +200,6 @@ const cfg = {
     year: new Date().getFullYear(),
     risks: ['Low', 'Medium', 'High'],
     formats: ['PPR', 'Half PPR', 'Standard'],
-    fileMap: { 'PPR': 'PPR.json', 'Half PPR': 'HPPR.json', 'Standard': 'STAN.json' },
     skillPositions: ['RB', 'WR', 'TE', 'QB'],
     positionFilters: ['ALL', 'RB', 'WR', 'TE', 'QB'],
     maxPlayers: 200,
@@ -281,8 +252,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         undoBtn: ['click', undo],
         redoBtn: ['click', redo],
         scoringFormat: ['click', cycleScoringFormat],
-        signInBtn: ['click', signInWithGoogle],
-        signOutBtn: ['click', signOutUser],
+        authBtn: ['click', signInWithGoogle],
         refreshConsensusBtn: ['click', refreshToExpertConsensus], // NEW
     };
 
@@ -410,9 +380,47 @@ function refreshToExpertConsensus() {
 
 
 function handleSearchInput() {
-    const clearBtn = $('clearSearch');
-    const searchValue = $('searchInput').value;
+    const searchInput = document.getElementById('searchInput');
+    const searchValue = searchInput.value;
+    let clearBtn = document.getElementById('clearSearch');
 
+    // Create clear button if it doesn't exist
+    if (!clearBtn) {
+        clearBtn = document.createElement('button');
+        clearBtn.id = 'clearSearch';
+        clearBtn.innerHTML = 'X';
+        clearBtn.style.cssText = `
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #9ca3af;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 10;
+            width: 20px;
+            height: 20px;
+            pointer-events: auto;
+        `;
+        clearBtn.onclick = handleClearSearch;
+
+        // Wrap the search input in a relative container
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position: relative; flex-grow: 1;';
+
+        // Replace search input with wrapper containing input + button
+        searchInput.parentNode.insertBefore(wrapper, searchInput);
+        wrapper.appendChild(searchInput);
+        wrapper.appendChild(clearBtn);
+
+        // Remove flex-grow from input, add to wrapper
+        searchInput.classList.remove('flex-grow');
+        searchInput.style.width = '100%';
+    }
+
+    // Show/hide based on input value
     if (searchValue.length > 0) {
         clearBtn.style.display = 'block';
     } else {
@@ -602,9 +610,8 @@ async function loadAllScoringFormats() {
         state.currentFormat = 'PPR';
         updateScoringButton('PPR');
     } catch (error) {
-        console.error('Error loading scoring formats from Firestore:', error);
-        // Fallback to single file load if needed
-        await loadPlayersFromFile();
+        console.error('Firestore loading failed, falling back to local data:', error);
+        throw error;
     }
 }
 
@@ -622,7 +629,16 @@ async function initializeRankings() {
 
     // No user or no cloud data - load from consensus
     console.log('Loading fresh consensus rankings');
-    loadPlayersFromConsensus(state.currentFormat);
+
+    // Data should already be loaded from Firestore, just set up the players
+    if (state.consensusData && state.consensusData[state.currentFormat]) {
+        state.players = deepCopy(state.consensusData[state.currentFormat]);
+        recalculateRanks();
+        filterPlayers();
+    } else {
+        console.log('No consensus data loaded - loading from Firestore fallback...');
+        await loadPlayersFromFile();
+    }
 }
 
 
@@ -638,15 +654,13 @@ function syncToggleVisuals() {
         if (toggle) {
             const circle = toggle.querySelector('div');
             if (circle) {
-                // Update visual to match state
+                // Use inline styles for everything to avoid CSS conflicts
                 if (isEnabled) {
-                    toggle.classList.remove('bg-slate-900');
-                    toggle.classList.add('bg-slate-800');
+                    toggle.classList.add('toggle-enabled');
                     circle.style.left = 'auto';
                     circle.style.right = '0.25rem';
                 } else {
-                    toggle.classList.remove('bg-slate-800');
-                    toggle.classList.add('bg-slate-900');
+                    toggle.classList.remove('toggle-enabled');
                     circle.style.right = 'auto';
                     circle.style.left = '0.25rem';
                 }
@@ -656,6 +670,15 @@ function syncToggleVisuals() {
             }
         }
     });
+}
+
+function loadPlayersFromConsensus(format) {
+    if (state.consensusData && state.consensusData[format]) {
+        state.players = deepCopy(state.consensusData[format]);
+        recalculateRanks();
+        state.originalConsensus[format] = deepCopy(state.players);
+        filterPlayers();
+    }
 }
 
 async function loadPlayersFromFile() {
@@ -702,41 +725,6 @@ async function loadPlayersFromFile() {
     }
 }
 
-function loadPlayersFromFile() {
-    const format = state.currentFormat || 'PPR';
-    const filename = cfg.fileMap[format] || 'PPR.json';
-
-    fetch(`Player-Context/Expert-Consensus/${filename}`)
-        .then(r => r.ok ? r.json() : Promise.reject())
-        .then(d => {
-            const allPlayers = d.players || d;
-
-            // Store ALL players
-            state.allConsensusData[format] = allPlayers.map((p, i) => ({
-                ...p,
-                id: p.id || `p${i}`,
-                risk: p.risk || 'Medium',
-                notes: p.notes || '',
-                originalRank: i + 1
-            }));
-
-            const skillPlayers = allPlayers
-                .filter(p => cfg.skillPositions.includes(p.position))
-                .slice(0, cfg.maxPlayers);
-
-            state.players = skillPlayers.map((p, i) => ({
-                ...p,
-                id: p.id || `p${i}`,
-                risk: p.risk || 'Medium',
-                notes: p.notes || '',
-                overallRank: i + 1
-            }));
-
-            recalculateRanks();
-            state.originalConsensus[format] = deepCopy(state.players);
-            filterPlayers();
-        });
-}
 
 function cycleScoringFormat() {
     const button = document.getElementById('scoringFormat');
@@ -1060,17 +1048,19 @@ function updatePlayerOrder() {
     }
 }
 
+
+
 // Rendering helpers
 const createRiskButton = (action, player) => {
     const risk = player?.risk || 'Medium';
     const riskLetter = risk[0] || 'M';
 
-    return `<button onclick="cycleRisk('${player.id}')" class="risk-button ${cfg.styles.riskBtn[risk]} border ${cfg.styles.riskBorder[risk]} w-10 h-10 rounded text-mini font-bold text-white transition-all duration-200 flex items-center justify-center">${riskLetter}</button>`;
+    return `<button onclick="cycleRisk('${player.id}')" class="risk-button ${cfg.styles.riskBtn[risk]} border ${cfg.styles.riskBorder[risk]} w-10 h-10 rounded text-sm font-bold text-white transition-all duration-200 flex items-center justify-center">${riskLetter}</button>`;
 };
 
 const createNotesIcon = (player) => {
     return `<button onclick="openNotesModal('${player.id}')" class="notes-icon bg-slate-600 border-2 border-slate-500 w-10 h-10 rounded text-white hover:bg-slate-700 transition-all duration-200 flex items-center justify-center" title="Edit notes">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                             </svg>
                         </button>`;
@@ -1078,15 +1068,25 @@ const createNotesIcon = (player) => {
 
 const createAddButton = (player) => {
     return `<button onclick="addPlayer('${player.id}')" class="bg-green-600 border-2 border-green-500 w-10 h-10 rounded text-white hover:bg-green-700 transition-all duration-200 flex items-center justify-center">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
                             </svg>
                         </button>`;
 };
 
-const createNotes = (player) => {
-    return `<textarea placeholder="Add player notes..." onchange="updateNotes('${player.id}', this.value)" class="w-full bg-slate-700 border-2 border-slate-600 rounded text-xs resize-none h-10 text-gray-100 placeholder-gray-400 focus:border-slate-600 focus:outline-none px-1 py-1">${player.notes}</textarea>`;
-};
+function updateNotesPosition() {
+    const isRiskDisabled = !state.toggles.risk;
+    const isNotesEnabled = state.toggles.notes; // Check if notes are enabled
+    
+    document.querySelectorAll('.notes-icon').forEach(icon => {
+        // Only transform if notes are actually enabled (visible)
+        if (isNotesEnabled && isRiskDisabled) {
+            icon.style.transform = 'translateX(24px)';
+        } else {
+            icon.style.transform = 'translateX(0)';
+        }
+    });
+}
 
 // Rendering
 function renderPlayers() {
@@ -1100,7 +1100,7 @@ function renderPlayers() {
         html.push(`
             <div class="player-item ${cfg.styles.posColors[p.position]} hover:shadow-lg" data-player-id="${p.id}" data-index="${i}">
                 <div class="p-2 gap-2 flex items-stretch">
-                    <div class="drag-area flex items-stretch flex-grow cursor-move lg:items-center lg:gap-1">
+                    <div class="drag-area flex flex-grow items-stretch cursor-move lg:items-center lg:gap-1">
                         <div class="w-12 flex flex-col items-center justify-center lg:w-12 lg:text-center lg:flex-shrink-0">
                             <div class="text-mega font-bold text-gray-100 lg:text-2xl">${p.overallRank}</div>
                             <div class="text-mini ${cfg.styles.positionBadge[p.position].split(' ')[0]} lg:hidden">${p.position}${p.positionRank}</div>
@@ -1108,7 +1108,7 @@ function renderPlayers() {
                         <div class="hidden lg:block lg:w-16 lg:flex-shrink-0 lg:flex lg:justify-center">
                             <span class="${cfg.styles.positionBadge[p.position]} px-2 py-1 rounded text-sm font-medium text-center">${p.position}${p.positionRank}</span>
                         </div>
-                        <div class="px-2 flex-grow flex items-center lg:px-0 lg:ml-4">
+                        <div class="px-2 flex-grow flex items-center">
                             <div class="flex-grow">
                                 <div class="font-semibold text-mega text-gray-100">${p.name}</div>
                                 <div class="text-mini text-gray-400 flex">
@@ -1118,8 +1118,7 @@ function renderPlayers() {
                             </div>
                         </div>
                     </div>
-                    <div class="notes-section flex-shrink-0 items-center overflow-hidden hidden lg:flex" style="width: 550px;">${createNotes(p)}</div>
-                    <div class="notes-icon w-10 flex items-center flex-shrink-0 lg:hidden">${createNotesIcon(p)}</div>
+                    <div class="notes-icon w-10 flex items-center flex-shrink-0">${createNotesIcon(p)}</div>
                     <div class="w-10 flex items-center flex-shrink-0">${createRiskButton('action', p)}</div>
                 </div>
             </div>
@@ -1139,7 +1138,7 @@ function renderPlayers() {
                         <div class="hidden lg:block lg:w-16 lg:flex-shrink-0 lg:flex lg:justify-center">
                             <span class="${cfg.styles.positionBadge[p.position]} px-2 py-1 rounded text-sm font-medium text-center">${p.position}${p.positionRank || ''}</span>
                         </div>
-                        <div class="px-2 flex-grow flex items-center lg:px-0 lg:ml-4">
+                        <div class="px-2 flex-grow flex items-center">
                             <div class="flex-grow">
                                 <div class="font-semibold text-mega text-gray-100">${p.name}</div>
                                 <div class="text-mini text-gray-400 flex">
@@ -1157,7 +1156,6 @@ function renderPlayers() {
 
     container.innerHTML = html.join('');
 
-    updateNotesPositioning();
     setupDragHandlers();
     syncToggleVisuals();
 }
@@ -1305,12 +1303,10 @@ function handleAutoScroll(clientY) {
     // Check if we're ABOVE the container - entire area above = zoom scroll up
     if (clientY < rect.top) {
         scrollSpeed = -12;
-        console.log('ABOVE CONTAINER - ZOOM SCROLL UP');
     }
     // Check if we're BELOW the container - entire area below = zoom scroll down  
     else if (clientY > rect.bottom) {
         scrollSpeed = 12;
-        console.log('BELOW CONTAINER - ZOOM SCROLL DOWN');
     }
     // Inside container - use the original zone logic
     else {
@@ -1328,38 +1324,27 @@ function handleAutoScroll(clientY) {
         // TOP ZONES - near the top edge of container
         if (positionInContainer < zoomZone) {
             scrollSpeed = -12;
-            console.log('TOP ZOOM ZONE');
         } else if (positionInContainer < fastZone) {
             scrollSpeed = -9;
-            console.log('TOP FAST ZONE');
         } else if (positionInContainer < mediumZone) {
             scrollSpeed = -6;
-            console.log('TOP MEDIUM ZONE');
         } else if (positionInContainer < slowZone) {
             scrollSpeed = -3;
-            console.log('TOP SLOW ZONE');
         } else if (positionInContainer < snailZone) {
             scrollSpeed = -1;
-            console.log('TOP SNAIL ZONE');
         }
         // BOTTOM ZONES - near the bottom edge of container
         else if (positionInContainer > containerHeight - zoomZone) {
             scrollSpeed = 12;
-            console.log('BOTTOM ZOOM ZONE');
         } else if (positionInContainer > containerHeight - fastZone) {
             scrollSpeed = 9;
-            console.log('BOTTOM FAST ZONE');
         } else if (positionInContainer > containerHeight - mediumZone) {
             scrollSpeed = 6;
-            console.log('BOTTOM MEDIUM ZONE');
         } else if (positionInContainer > containerHeight - slowZone) {
             scrollSpeed = 3;
-            console.log('BOTTOM SLOW ZONE');
         } else if (positionInContainer > containerHeight - snailZone) {
             scrollSpeed = 1;
-            console.log('BOTTOM SNAIL ZONE');
         } else {
-            console.log('NO SCROLL ZONE');
         }
     }
 
@@ -1582,7 +1567,7 @@ window.cycleRisk = id => {
 };
 
 window.updateNotes = (id, notes) => {
-    saveState('update notes'); // ADD THIS LINE
+    saveState('update notes');
     const p = state.players.find(x => x.id === id);
     if (p) p.notes = notes;
 };
@@ -1605,7 +1590,7 @@ function downloadPrintable() {
     }
 
     const scoring = state.currentFormat || 'PPR';
-    const backendFormat = cfg.fileMap[scoring].replace('.json', '');
+    const backendFormat = scoring.replace(' ', '');
 
     downloadFile(generatePrintableHTML(), `${name}${cfg.year}${backendFormat}Printable.html`, 'text/html');
 }
@@ -1628,7 +1613,7 @@ const autoSave = debounce(async () => {
             year: cfg.year,
             scoringFormat: state.currentFormat,
             players: state.players,
-            toggles: state.toggles, // ADD THIS LINE
+            toggles: state.toggles,
             lastUpdated: new Date().toISOString()
         };
 
@@ -1764,7 +1749,6 @@ function updateAuthUI(user) {
         initializeRankings();
     }
 }
-
 
 window.updateAuthUI = updateAuthUI;
 window.refreshToExpertConsensus = refreshToExpertConsensus;

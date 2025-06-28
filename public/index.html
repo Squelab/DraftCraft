@@ -43,152 +43,158 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 
-<header class="bg-black border-b border-slate-700 sticky top-0 z-50">
-    <div class="container mx-auto px-4 py-3 max-w-6xl">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <img src="favicon.png" alt="Draft Craft" class="w-8 h-8 md:w-10 md:h-10 cursor-pointer hover:opacity-80 transition-opacity" onclick="location.reload()">
-                <h1 id="dynamicTitle" class="text-xl md:text-2xl font-semibold text-gray-100">
-                    Your 2025 PPR Rankings
-                </h1>
-            </div>
-            <div class="flex items-center gap-3">
-                <!-- Hamburger Menu Button -->
-                <button id="hamburgerMenuBtn" class="w-8 h-8 md:w-10 md:h-10 flex flex-col justify-center items-center z-50 space-y-1 text-gray-100 hover:text-white transition-colors">
-                    <span class="block w-8 h-1.5 bg-current rounded-full transition-all duration-300"></span>
-                    <span class="block w-8 h-1.5 bg-current rounded-full transition-all duration-300"></span>
-                    <span class="block w-8 h-1.5 bg-current rounded-full transition-all duration-300"></span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Header Dropdown Menu - Desktop Layout -->
-        <div id="hamburgerMenu" class="bg-black border-slate-700">
-            <!-- Rows 1 & 2: Sign In/Up on far left, everything else anchored right -->
-            <div class="flex justify-between items-start mb-4">
-
-                <!-- Far Left: Sign Up/In/Out (top row together) -->
-                <div class="flex gap-2">
-                    <div class="flex gap-2">
-                        <button id="refreshConsensusBtn" class="bg-black hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3" style="display: none;" title="Reset rankings to expert consensus">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                            </svg>
-                            <span class="hidden md:inline ml-1">RESET</span>
-                        </button>
-                        <button id="authBtn" class="flex items-center justify-center bg-black text-gray-100 border-2 border-slate-700 hover:opacity-80 transition-opacity rounded-md font-medium text-xs h-8 w-8 md:w-auto md:px-3">
-                            <svg id="authIcon" class="w-3 h-3" viewBox="0 0 48 48">
-                                <path fill="#e5e5e5" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
-                            </svg>
-                            <span id="authText" class="hidden md:inline ml-1">Sign in with Google</span>
-                        </button>
-                    </div>
+<body class="bg-slate-900 min-h-screen text-
+      ">
+    <header class="bg-black border-b border-slate-700 sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 max-w-6xl">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <img src="favicon.png" alt="Draft Craft" class="w-8 h-8 md:w-10 md:h-10 cursor-pointer hover:opacity-80 transition-opacity" onclick="location.reload()">
+                    <h1 id="dynamicTitle" class="text-xl md:text-2xl font-semibold text-white">
+                        Your 2025 PPR Rankings
+                    </h1>
                 </div>
+                <div class="flex items-center gap-3">
+                    <!-- Hamburger Menu Button -->
+                    <button id="hamburgerMenuBtn" class="w-8 h-8 md:w-10 md:h-10 flex flex-col justify-center items-center z-50 space-y-1 text-white hover:text-white transition-colors">
+                        <span class="block w-8 h-1.5 bg-current rounded-full transition-all duration-300"></span>
+                        <span class="block w-8 h-1.5 bg-current rounded-full transition-all duration-300"></span>
+                        <span class="block w-8 h-1.5 bg-current rounded-full transition-all duration-300"></span>
+                    </button>
+                </div>
+            </div>
 
-                <!-- Right Side: Toggles, Format Cycler, Print/Draft (all anchored right) -->
-                <div class="flex items-center gap-2">
-                    <!-- Toggles Area (each row right-aligned) -->
-                    <div class="flex flex-col gap-4 self-start">
-                        <div class="flex justify-end">
-                            <div class="flex items-center gap-2">
-                                <label class="text-white text-sm">ADP</label>
-                                <button id="adpToggle" class="toggle-btn w-11 h-6 bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="false">
-                                    <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 left-1"></div>
-                                </button>
-                            </div>
-                            <div class="flex items-center gap-2 w-24 justify-end">
-                                <!-- justify-end added -->
-                                <label class="text-white text-sm">:(</label>
-                                <button id="tiersToggle" class="toggle-btn w-11 h-6 bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="false">
-                                    <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 left-1"></div>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="flex justify-end">
-                            <div class="flex items-center gap-2">
-                                <label class="text-white text-sm">NOTES</label>
-                                <button id="notesToggle" class="toggle-btn w-11 h-6 bg-slate-700 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="true">
-                                    <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 right-1"></div>
-                                </button>
-                            </div>
-                            <div class="flex items-center gap-2 w-24 justify-end">
-                                <!-- justify-end added -->
-                                <label class="text-white text-sm">RISK</label>
-                                <button id="riskToggle" class="toggle-btn w-11 h-6 bg-slate-700 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="true">
-                                    <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 right-1"></div>
-                                </button>
-                            </div>
+            <!-- Header Dropdown Menu - Desktop Layout -->
+            <div id="hamburgerMenu" class="bg-black border-slate-700">
+                <!-- Rows 1 & 2: Sign In/Up on far left, everything else anchored right -->
+                <div class="flex justify-between items-start mb-4">
+
+                    <!-- Far Left: Sign Up/In/Out (top row together) -->
+                    <div class="flex gap-2">
+                        <div class="flex gap-2">
+                            <button id="refreshConsensusBtn" class="bg-black hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3" style="display: none;" title="Reset rankings to expert consensus">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                <span class="hidden md:inline ml-1">RESET</span>
+                            </button>
+                            <button id="authBtn" class="flex items-center justify-center bg-slate-900 text-white border-2 border-slate-700 hover:opacity-80 transition-opacity rounded-md font-medium text-xs h-8 w-8 md:w-auto md:px-3">
+                                <svg id="authIcon" class="w-3 h-3" viewBox="0 0 48 48">
+                                    <path fill="#e5e5e5" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                                </svg>
+                                <span id="authText" class="hidden md:inline ml-1">Sign in with Google</span>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Format Cycler -->
-                    <div class="flex items-center">
-                        <button id="scoringFormat" class="w-[18px] h-[70px] bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-md flex flex-col items-center justify-center transition-all duration-200 cursor-pointer text-white font-medium relative overflow-hidden" title="Scoring Format: PPR">
-                            <div class="absolute inset-0 bg-slate-700 transition-transform duration-200 ease-in-out" id="formatHighlight" style="transform: translateY(0); height: 33.33%;"></div>
-                            <div class="relative z-10 flex-1 flex items-center justify-center" data-format="PPR">
-                                <div class="w-2 h-2 bg-white rounded-full"></div>
-                            </div>
-                            <div class="relative z-10 flex-1 flex items-center justify-center" data-format="Half PPR">
-                                <div class="w-2 h-2 rounded-full border border-white relative overflow-hidden">
-                                    <div class="absolute left-0 top-0 w-[3.5px] h-2 bg-white"></div>
+                    <!-- Right Side: Toggles, Format Cycler, Print/Draft (all anchored right) -->
+                    <div class="flex items-center gap-2">
+                        <!-- Toggles Area (each row right-aligned) -->
+                        <div class="flex flex-col gap-4 self-start">
+                            <div class="flex justify-end">
+                                <div class="flex items-center gap-2">
+                                    <label class="text-white text-sm">ADP</label>
+                                    <button id="adpToggle" class="toggle-btn w-11 h-6 bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="false">
+                                        <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 left-1"></div>
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-2 w-24 justify-end">
+                                    <label class="text-white text-sm">:(</label>
+                                    <button id="tiersToggle" class="toggle-btn w-11 h-6 bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="false">
+                                        <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 left-1"></div>
+                                    </button>
                                 </div>
                             </div>
-                            <div class="relative z-10 flex-1 flex items-center justify-center" data-format="Standard">
-                                <div class="w-2 h-2 border border-white rounded-full"></div>
+                            <div class="flex justify-end">
+                                <div class="flex items-center gap-2">
+                                    <label class="text-white text-sm">NOTES</label>
+                                    <button id="notesToggle" class="toggle-btn w-11 h-6 bg-slate-700 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="true">
+                                        <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 right-1"></div>
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-2 w-24 justify-end">
+                                    <label class="text-white text-sm">RISK</label>
+                                    <button id="riskToggle" class="toggle-btn w-11 h-6 bg-slate-700 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="true">
+                                        <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 right-1"></div>
+                                    </button>
+                                </div>
                             </div>
-                        </button>
+                        </div>
+
+                        <!-- Format Cycler -->
+                        <div class="flex items-center">
+                            <button id="scoringFormat" class="w-[18px] h-[70px] bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-md flex flex-col items-center justify-center transition-all duration-200 cursor-pointer text-white font-medium relative overflow-hidden" title="Scoring Format: PPR">
+                                <div class="absolute inset-0 bg-slate-700 transition-transform duration-200 ease-in-out" id="formatHighlight" style="transform: translateY(0); height: 33.33%;"></div>
+                                <div class="relative z-10 flex-1 flex items-center justify-center" data-format="PPR">
+                                    <div class="w-2 h-2 bg-white rounded-full"></div>
+                                </div>
+                                <div class="relative z-10 flex-1 flex items-center justify-center" data-format="Half PPR">
+                                    <div class="w-2 h-2 rounded-full border border-white relative overflow-hidden">
+                                        <div class="absolute left-0 top-0 w-[3.5px] h-2 bg-white"></div>
+                                    </div>
+                                </div>
+                                <div class="relative z-10 flex-1 flex items-center justify-center" data-format="Standard">
+                                    <div class="w-2 h-2 border border-white rounded-full"></div>
+                                </div>
+                            </button>
+                        </div>
+
+                        <!-- Print/Draft (stacked, far right) -->
+                        <div class="flex flex-col gap-2">
+                            <button id="printBtn" class="bg-slate-900 hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zM6 14a1 1 0 001-1v-1h6v1a1 1 0 001 1v2H6v-2z" clip-rule="evenodd" />
+                                </svg>
+                                <span class="hidden md:inline ml-1">PRINT</span>
+                            </button>
+                            <button id="draftBtn" class="trophy-icon bg-slate-900 hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                  <rect x="8" y="4" width="8" height="10" rx="1"/>
+                                  <path d="M7 6 C4 6, 4 10, 7 10" fill="none" stroke="currentColor" stroke-width="2"/>
+                                  <path d="M17 6 C20 6, 20 10, 17 10" fill="none" stroke="currentColor" stroke-width="2"/>
+                                  <rect x="11" y="14" width="2" height="4"/>
+                                  <rect x="6" y="18" width="12" height="2" rx="1"/>
+                                </svg>
+                                <span class="hidden md:inline ml-1">DRAFT</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 3: Search, Position Filter, Undo/Redo -->
+                <div class="flex gap-2">
+                    <!-- Search Input (always visible, simpler approach) -->
+                    <div class="flex-grow relative">
+                        <input type="text" id="searchInput" placeholder="Search players & teams..." class="flex-grow h-10 bg-black border-2 border-slate-700 rounded-md px-3 py-2 text-gray-100 placeholder-gray-400 focus:outline-none w-full">
+                        <button id="clearSearch" class="fixed text-gray-400 hover:text-gray-200 z-10" style="display: none; right: 100px; top: 100px;">X</button>
                     </div>
 
-                    <!-- Print/Draft (stacked, far right) -->
-                    <div class="flex flex-col gap-2">
-                        <button id="printBtn" class="bg-slate-900 hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3">
-                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zM6 14a1 1 0 001-1v-1h6v1a1 1 0 001 1v2H6v-2z" clip-rule="evenodd" />
+
+                    <!-- Position Filter -->
+                    <button id="positionFilter" class="w-10 h-10 bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer text-white font-bold text-lg" title="Filter by position">
+                        <img src="favicon.png" class="w-7 h-7">
+                    </button>
+
+                    <!-- Undo/Redo (stacked) -->
+                    <div class="flex flex-col gap-1">
+                        <button id="undoBtn" class="w-10 h-[18px] bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer text-white disabled:opacity-50 disabled:cursor-not-allowed" title="Undo (Ctrl+Z)" disabled>
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
                             </svg>
-                            <span class="hidden md:inline ml-1">PRINT</span>
                         </button>
-                        <button id="draftBtn" class="bg-slate-900 hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3">
-                            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <button id="redoBtn" class="w-10 h-[18px] bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer text-white disabled:opacity-50 disabled:cursor-not-allowed" title="Redo (Ctrl+Y)" disabled>
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6"></path>
                             </svg>
-                            <span class="hidden md:inline ml-1">DRAFT</span>
                         </button>
                     </div>
                 </div>
+
+                <!-- Hidden user info -->
+                <div id="userInfo" class="text-white text-xs hidden mt-2"></div>
             </div>
-
-            <!-- Row 3: Search, Position Filter, Undo/Redo -->
-            <div class="flex gap-2">
-                <!-- Search Input (always visible, simpler approach) -->
-                <input type="text" id="searchInput" placeholder="Search players & teams..." class="flex-grow h-10 bg-black border-2 border-slate-700 rounded-md px-3 py-2 text-gray-100 placeholder-gray-400 focus:outline-none">
-
-                <!-- Position Filter -->
-                <button id="positionFilter" class="w-10 h-10 bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer text-white font-bold text-lg" title="Filter by position">
-                    <img src="favicon.png" class="w-7 h-7">
-                </button>
-
-                <!-- Undo/Redo (stacked) -->
-                <div class="flex flex-col gap-1">
-                    <button id="undoBtn" class="w-10 h-[18px] bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer text-white disabled:opacity-50 disabled:cursor-not-allowed" title="Undo (Ctrl+Z)" disabled>
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
-                        </svg>
-                    </button>
-                    <button id="redoBtn" class="w-10 h-[18px] bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-md flex items-center justify-center transition-all duration-200 cursor-pointer text-white disabled:opacity-50 disabled:cursor-not-allowed" title="Redo (Ctrl+Y)" disabled>
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Hidden user info -->
-            <div id="userInfo" class="text-white text-xs hidden mt-2"></div>
         </div>
-    </div>
-</header>
-
-<body class="bg-slate-900 min-h-screen text-gray-100">
+    </header>
     <!-- Backdrop -->
     <div id="backdrop" class="fixed inset-0 bg-black bg-opacity-50 overlay-backdrop z-40 hidden"></div>
     <div id="deleteZone" class="w-10 h-10 bg-red-600 border-2 border-red-500 rounded-md flex items-center justify-center hover:bg-red-700 transition-all duration-200 cursor-pointer" title="Drop player here to delete">

@@ -11,11 +11,12 @@ body {
 }
 
 header {
-    flex-shrink: 0; /* Don't shrink header */
-}
-
-:root {
-    --sab: env(safe-area-inset-bottom, 0px);
+    flex-shrink: 0;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
+    transform: translateZ(0);
+    will-change: transform;
 }
 
 .container {
@@ -23,6 +24,9 @@ header {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    transform: none !important;
+    position: static !important;
+    z-index: auto !important;
 }
 
 .bg-slate-800.rounded-lg {
@@ -37,25 +41,6 @@ header {
     display: none;
 }
 
-#searchInput {
-    min-width: 0;
-    flex-shrink: 1;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    /* Force it to always truncate by limiting width */
-    max-width: 9999px; /* Adjust this value as needed */
-}
-
-/* Make sure the position filter button doesn't shrink */
-#positionFilter {
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-/* And the undo/redo container too */
-#undoBtn, #redoBtn {
-    flex-shrink: 0;
-}
-
 #deleteZone {
     position: fixed;
     top: -1000px;
@@ -65,6 +50,18 @@ header {
     opacity: 0;
     pointer-events: auto;
     z-index: 9999; /* if needed */
+}
+
+#adpToggle, #tiersToggle, #riskToggle, #notesToggle {
+    background-color: #1a1a1a !important; /* Your slate-900 OFF state */
+}
+
+/* When toggles are enabled (you'll need to add this class in JavaScript) */
+#adpToggle.toggle-enabled, 
+#tiersToggle.toggle-enabled, 
+#riskToggle.toggle-enabled, 
+#notesToggle.toggle-enabled {
+    background-color: #333333 !important; /* Your slate-700 ON state */
 }
 
 /* IDK why this centers the 'x' but it does */
@@ -129,48 +126,6 @@ header {
     opacity: 1;
 }
 
-/* Notes Section - Responsive */
-.notes-section,
-.notes-icon {
-    display: none !important;
-}
-
-.notes-visible .notes-section {
-    display: flex !important;
-}
-
-
-
-@media (max-width: 1023px) {
-    .notes-visible .notes-section {
-        display: none !important;
-    }
-
-    .notes-visible .notes-icon {
-        display: flex !important;
-    }
-}
-
-@media (hover: none) and (pointer: coarse) {
-    .player-card:hover,
-    .player-card:active,
-    .player-card:focus {
-        background-color: inherit !important;
-        transform: none !important;
-        box-shadow: none !important;
-    }
-
-    .player-card .player-name:hover,
-    .player-card .player-team:hover {
-        color: inherit !important;
-    }
-}
-
-.player-card {
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-}
-
 /* Hamburger menu slide animation */
 #hamburgerMenu {
     max-height: 0;
@@ -195,6 +150,24 @@ header {
     pointer-events: auto;
 }
 
+#searchInput {
+    min-width: 0;
+    flex-shrink: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 9999px; /* Adjust this value as needed */
+}
+
+/* Make sure the position filter button doesn't shrink */
+#positionFilter {
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* And the undo/redo container too */
+#undoBtn, #redoBtn {
+    flex-shrink: 0;
+}
+
 .header-container::before {
     content: '';
     position: fixed;
@@ -206,23 +179,16 @@ header {
     z-index: 0; /* Behind the header content */
 }
 
-#dynamicTitle {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: calc(100vw - 120px); /* Leave space for logo + hamburger */
-}
-
 /* Header area & drop down no select*/
-.header, formatHighlight
+.header, .formatHighlight
 .header *,
 #dynamicTitle,
 #hamburgerMenu,
 #hamburgerMenu *,
 #hamburgerMenuBtn,
 #hamburgerMenuBtn *,
-button,
-button *,
+header button,
+header button *,
 .menu-item,
 .toggle-label {
     -webkit-user-select: none !important;
@@ -241,17 +207,6 @@ textarea {
     user-select: text !important;
 }
 
-/* Interactive Elements */
-.risk-visible .risk-button {
-    display: flex !important;
-}
-
-.risk-button {
-    display: none !important;
-}
-
-.notes-section,
-.notes-section *,
 button,
 button *,
 textarea {
@@ -381,11 +336,6 @@ textarea {
     }
 }
 
-.menu-overlay {
-    transform-origin: top right;
-    animation: scaleIn 0.2s ease-out;
-}
-
 @keyframes scaleOut {
     from {
         transform: scale(1);
@@ -398,14 +348,18 @@ textarea {
     }
 }
 
-/* Handle Safari's stupid tab overlay */
-@supports (-webkit-touch-callout: none) {
-    .container {
-        padding-bottom: env(safe-area-inset-bottom, 20px);
+@media (hover: hover) and (pointer: fine) {
+    button:hover {
+        /* your hover styles here */
     }
-    /* If the overlay is still covering content */
-    body {
-        padding-bottom: env(safe-area-inset-bottom, 0px);
+    
+    .bg-slate-600:hover {
+        background-color: #404040 !important;
+    }
+}
+
+@media (hover: none) and (pointer: coarse) {
+    button:hover {
     }
 }
 
@@ -492,61 +446,25 @@ footer .text-gray-100 {
     color: #bbbbbb !important;
 }
 
-/* Internal fade container setup */
-.fade-edges {
-    position: relative;
-    overflow: hidden;
-}
-
-/* Top fade overlay */
-.fade-edges::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 80px;
-    background: linear-gradient(to bottom, #2a2a2a 0%, rgba(42, 42, 42, 0.8) 30%, transparent 100%);
-    pointer-events: none;
-    z-index: 10;
-}
-
-/* Bottom fade overlay */
-.fade-edges::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 80px;
-    background: linear-gradient(to top, #2a2a2a 0%, rgba(42, 42, 42, 0.8) 30%, transparent 100%);
-    pointer-events: none;
-    z-index: 10;
-}
-
-/* Player card styling - SHIMMER EFFECT REMOVED */
+/* Player card styling */
 .player-item {
     position: relative;
     transition: all 0.3s ease;
 }
 
-/* Subtle lift effect on hover - SHIMMER REMOVED */
+/* Subtle lift effect on hover */
 .player-item:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-/* True glassmorphism effect for player cards */
+/* Glassmorphism effect for player cards */
 .player-item {
-    /* Brighter glass background with more light collection */
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.06) 100%), rgba(42, 42, 42, 0.7);
-    /* Enhanced blur with more saturation for vivid colors */
     backdrop-filter: blur(16px) saturate(220%) brightness(1.1);
     -webkit-backdrop-filter: blur(16px) saturate(220%) brightness(1.1);
-    /* Brighter borders and more light reflection */
     border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 10px rgba(255, 255, 255, 0.03);
-    /* Smooth transitions */
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -604,4 +522,30 @@ footer .text-gray-100 {
     opacity: 0.9;
     backdrop-filter: blur(12px) saturate(170%);
     -webkit-backdrop-filter: blur(12px) saturate(170%);
+}
+
+
+/* Interactive Elements */
+.risk-visible .risk-button {
+    display: flex !important;
+}
+
+.risk-button {
+    display: none !important;
+}
+
+html body.notes-visible .player-item .notes-icon {
+    display: flex !important;
+}
+
+html body .player-item .notes-icon {
+    display: none !important;
+}
+
+.notes-icon {
+    display: flex !important;
+}
+
+.notes-icon svg path {
+    stroke: white !important;
 }
