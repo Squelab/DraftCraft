@@ -72,7 +72,7 @@
                     <!-- Far Left: Sign Up/In/Out (top row together) -->
                     <div class="flex gap-2">
                         <div class="flex gap-2">
-                            <button id="refreshConsensusBtn" class="bg-black hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3" style="display: none;" title="Reset rankings to expert consensus">
+                            <button id="refreshConsensusBtn" class="bg-slate-900 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3" style="display: none;" title="Reset rankings to expert consensus">
                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                                 </svg>
@@ -141,19 +141,19 @@
 
                         <!-- Print/Draft (stacked, far right) -->
                         <div class="flex flex-col gap-2">
-                            <button id="printBtn" class="bg-slate-900 hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3">
+                            <button id="printBtn" class="bg-slate-900 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3">
                                 <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zM6 14a1 1 0 001-1v-1h6v1a1 1 0 001 1v2H6v-2z" clip-rule="evenodd" />
                                 </svg>
                                 <span class="hidden md:inline ml-1">PRINT</span>
                             </button>
-                            <button id="draftBtn" class="trophy-icon bg-slate-900 hover:bg-slate-700 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3">
+                            <button id="draftBtn" class="trophy-icon bg-slate-900 border-2 border-slate-700 hover:opacity-80 text-white rounded-md transition-colors font-medium text-xs flex items-center justify-center h-8 w-8 md:w-[88px] md:px-3">
                                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                  <rect x="8" y="4" width="8" height="10" rx="1"/>
-                                  <path d="M7 6 C4 6, 4 10, 7 10" fill="none" stroke="currentColor" stroke-width="2"/>
-                                  <path d="M17 6 C20 6, 20 10, 17 10" fill="none" stroke="currentColor" stroke-width="2"/>
-                                  <rect x="11" y="14" width="2" height="4"/>
-                                  <rect x="6" y="18" width="12" height="2" rx="1"/>
+                                    <rect x="8" y="4" width="8" height="10" rx="1" />
+                                    <path d="M7 6 C4 6, 4 10, 7 10" fill="none" stroke="currentColor" stroke-width="2" />
+                                    <path d="M17 6 C20 6, 20 10, 17 10" fill="none" stroke="currentColor" stroke-width="2" />
+                                    <rect x="11" y="14" width="2" height="4" />
+                                    <rect x="6" y="18" width="12" height="2" rx="1" />
                                 </svg>
                                 <span class="hidden md:inline ml-1">DRAFT</span>
                             </button>
@@ -204,8 +204,8 @@
     </div>
     <div class="container mx-auto p-2 max-w-6xl">
         <!-- Rankings List -->
-        <div class="bg-slate-800 rounded-lg shadow-xl p-3">
-            <div id="playersList"></div>
+        <div class="bg-slate-800 rounded-lg shadow-xl p-3 flex-1 flex flex-col min-h-0">
+            <div id="playersList" class="flex-1 overflow-y-auto"></div>
         </div>
     </div>
 
@@ -222,13 +222,18 @@
         </div>
     </div>
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import {
+            getAuth, GoogleAuthProvider, signInWithRedirect,
+            getRedirectResult, signOut, onAuthStateChanged,
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import {
+            getFirestore, doc, getDoc, setDoc
+        } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBunc8nLXGt2lDJRgm2K9Cu3ZjIIIf2J6g",
-            authDomain: "draft-craft-1074d.firebaseapp.com",
+            authDomain: "drftcrft.com",
             projectId: "draft-craft-1074d",
             storageBucket: "draft-craft-1074d.firebasestorage.app",
             messagingSenderId: "524290680417",
@@ -240,16 +245,44 @@
         const db = getFirestore(app);
         const provider = new GoogleAuthProvider();
 
-        window.firebase = { auth, db, provider, signInWithPopup, signOut, doc, setDoc, getDoc, onAuthStateChanged };
+        window.firebase = {
+            auth, provider, db, doc, getDoc, setDoc,
+            signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
+        };
 
-        onAuthStateChanged(auth, (user) => {
-            console.log('Auth state changed:', user ? user.displayName : 'Not signed in');
+        onAuthStateChanged(auth, async (user) => {
+            console.log('Auth state changed:', user ? user.displayName : 'No user');
+
+            if (user) {
+                // Check for anonymous work to preserve
+                const anonymousWork = localStorage.getItem('anonymousRankings');
+                if (anonymousWork) {
+                    console.log('Found anonymous work, preserving...');
+                    const savedWork = JSON.parse(anonymousWork);
+
+                    // Check if this work is recent (within last hour)
+                    if (Date.now() - savedWork.timestamp < 3600000) {
+                        console.log('Anonymous work is recent, will restore when main.js loads...');
+
+                        // Store it for main.js to pick up later
+                        window.pendingAnonymousWork = savedWork;
+                        localStorage.removeItem('anonymousRankings');
+                    } else {
+                        console.log('Anonymous work too old, discarding');
+                        localStorage.removeItem('anonymousRankings');
+                    }
+                }
+            }
+
+            // Update UI when ready
             if (typeof updateAuthUI === 'function') {
                 updateAuthUI(user);
             }
         });
+
+        console.log('Firebase setup complete');
     </script>
-    <script src="main.js"></script>
+    <script type="module" src="main.js"></script>
     <footer id="safeAreaFooter" class="safe-area-footer hidden">
     </footer>
 </body>

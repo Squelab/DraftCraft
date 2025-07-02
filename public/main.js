@@ -9,6 +9,8 @@ const state = {
     currentFormat: 'PPR',
     positionFilter: 'ALL',
     showRiskButtons: true,
+    hasModifications: false,
+    isAnonymousWork: true,
     toggles: {
         adp: false,
         tiers: false,
@@ -41,54 +43,56 @@ const state = {
     }
 };
 
-let isMenuOpen = false;
-
-// Close menu on escape key
-document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && isMenuOpen) {
-        const menuBtn = $('hamburgerMenuBtn');
-        if (menuBtn) menuBtn.click(); // Just trigger the button click
-    }
-});
+function waitForFirebase() {
+    return new Promise((resolve) => {
+        if (window.firebase?.auth) {
+            resolve();
+        } else {
+            setTimeout(() => waitForFirebase().then(resolve), 50);
+        }
+    });
+}
 
 function setupHamburgerMenu() {
-    const menuBtn = $('hamburgerMenuBtn');
-    const menu = $('hamburgerMenu');
+    const menuBtn = document.getElementById('hamburgerMenuBtn');
+    const menu = document.getElementById('hamburgerMenu');
 
-    if (!menuBtn || !menu) {
-        console.warn('Hamburger menu elements not found');
-        return;
-    }
+    // Make sure menu starts hidden
+    menu.classList.remove('show');
 
-    // Remove the hidden class initially since we're using max-height now
-    menu.classList.remove('hidden');
-
-    // Toggle menu
-    on(menuBtn, 'click', () => {
-        isMenuOpen = !isMenuOpen;
-
-        if (isMenuOpen) {
-            menu.classList.add('show');
-        } else {
-            menu.classList.remove('show');
-        }
-
-        // Hamburger to X animation
+    // Hamburger animation function
+    function animateHamburger(isOpen) {
         const lines = menuBtn.querySelectorAll('span');
         if (lines.length >= 3) {
-            if (isMenuOpen) {
+            if (isOpen) {
                 lines[0].style.transform = 'translateY(10px) rotate(45deg)';
                 lines[1].style.opacity = '0';
-                lines[1].style.transform = 'scale(0)';
                 lines[2].style.transform = 'translateY(-10px) rotate(-45deg)';
             } else {
                 lines[0].style.transform = 'translateY(0) rotate(0)';
                 lines[1].style.opacity = '1';
-                lines[1].style.transform = 'scale(1)';
                 lines[2].style.transform = 'translateY(0) rotate(0)';
             }
         }
-    });
+    }
+
+    // Toggle function with access to animateHamburger
+    window.toggleHamburgerMenu = function () {
+        const isCurrentlyOpen = menu.classList.contains('show');
+
+        if (isCurrentlyOpen) {
+            // Close menu
+            menu.classList.remove('show');
+            animateHamburger(false);
+        } else {
+            // Open menu
+            menu.classList.add('show');
+            animateHamburger(true);
+        }
+    }
+
+    // Click handler
+    menuBtn.addEventListener('click', window.toggleHamburgerMenu);
 }
 
 // Toggle Switch Functionality
@@ -99,11 +103,6 @@ function setupToggleSwitches() {
     toggleIds.forEach((toggleId, index) => {
         const toggle = $(toggleId);
         const stateKey = stateKeys[index];
-
-        if (!toggle) {
-            console.warn(`Toggle ${toggleId} not found`);
-            return;
-        }
 
         // Add click handler
         on(toggle, 'click', () => {
@@ -144,7 +143,7 @@ function applyDisplaySettings(setting, enabled) {
         case 'notes':
             if (enabled) {
                 document.body.classList.add('notes-visible');
-                updateNotesPosition(); 
+                updateNotesPosition();
             } else {
                 document.body.classList.remove('notes-visible');
                 document.querySelectorAll('.notes-icon').forEach(icon => {
@@ -179,6 +178,7 @@ function updateDynamicTitle() {
     // Auto-save when format changes (only if user is signed in)
     if (user) autoSave();
 }
+
 
 // Haptic pickup/drop Idk if this works I only have an iphone
 const vibrate = (pattern) => {
@@ -252,8 +252,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         undoBtn: ['click', undo],
         redoBtn: ['click', redo],
         scoringFormat: ['click', cycleScoringFormat],
-        authBtn: ['click', signInWithGoogle],
-        refreshConsensusBtn: ['click', refreshToExpertConsensus], // NEW
+        refreshConsensusBtn: ['click', refreshToExpertConsensus],
+        draftBtn: ['click', handleDraftClick],
     };
 
     // Add null checks for each element
@@ -329,6 +329,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Force layout recalculation when page becomes visible (fixes mobile cache restoration issues)
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            // Force reflow to fix header/content overlap on mobile restoration
+            requestAnimationFrame(() => {
+                const container = document.querySelector('.container');
+                if (container) {
+                    // Trigger layout recalculation
+                    container.style.display = 'none';
+                    container.offsetHeight; // Force reflow
+                    container.style.display = 'flex';
+                }
+            });
+        }
+    });
+
+    // Also fix on page show (handles back/forward cache)
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            // Page was restored from cache
+            requestAnimationFrame(() => {
+                const container = document.querySelector('.container');
+                if (container) {
+                    // Trigger layout recalculation
+                    container.style.display = 'none';
+                    container.offsetHeight; // Force reflow
+                    container.style.display = 'flex';
+                }
+            });
+        }
+    });
+
     on(window, 'resize', () => {
         cancelDragOperation();
         clearTimeout(state.dragState.timers.resize);
@@ -337,23 +369,51 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 250);
     });
 
-    // Warn before page refresh/close
-    on(window, 'beforeunload', (e) => {
-        e.preventDefault();
-        e.returnValue = 'Are you sure you want to leave? You will lose your unsaved rankings progress.';
-        return 'Are you sure you want to leave? You will lose your unsaved rankings progress.';
-    });
+    setupHamburgerMenu();
 
-    // MODIFIED: Load consensus data first, then initialize rankings
+    // Load consensus data first, then initialize rankings
     await loadAllScoringFormats();
 
     // Wait a bit for Firebase auth to initialize if it exists
     setTimeout(async () => {
         await initializeRankings();
-        setupHamburgerMenu();
         setupToggleSwitches();
     }, 100);
 });
+
+function setOriginalConsensusForCurrentFormat() {
+    if (state.players && state.players.length > 0) {
+        state.originalConsensus[state.currentFormat] = deepCopy(state.players);
+        console.log(`Set originalConsensus for ${state.currentFormat}`);
+    }
+}
+
+function handleDraftClick() {
+    // Use onAuthStateChanged to get the current auth state reliably
+    window.firebase.onAuthStateChanged(window.firebase.auth, (user) => {
+        if (user) {
+            // Get the current title
+            const titleElement = document.getElementById('dynamicTitle');
+            const currentTitle = titleElement ? titleElement.textContent : 'Your 2025 PPR Rankings';
+
+            // Pass current rankings and title to draft room via localStorage
+            localStorage.setItem('draftRankings', JSON.stringify({
+                players: state.players,
+                currentFormat: state.currentFormat,
+                title: currentTitle,
+                timestamp: Date.now()
+            }));
+            // User is signed in, open draft room in new tab
+            window.open('draft.html', '_blank');
+        } else {
+            // No user signed in
+            if (confirm('You must be signed in to enter the draft room.\n\nPlease sign in with Google first.')) {
+                signInWithGoogle();
+            }
+        }
+    });
+}
+
 
 function refreshToExpertConsensus() {
     // First confirmation
@@ -371,13 +431,15 @@ function refreshToExpertConsensus() {
     if (!reallyConfirmed) return;
 
     saveState('refresh to consensus');
-    // Load fresh consensus data for current format
     loadPlayersFromConsensus(state.currentFormat);
-    // Auto-save the reset rankings
-    autoSave();
-    console.log(`Rankings refreshed to expert consensus for ${state.currentFormat}`);
-}
 
+    state.originalConsensus[state.currentFormat] = deepCopy(state.players);
+
+    // Reset consensus reference after refresh
+
+    state.hasModifications = false;
+    autoSave();
+}
 
 function handleSearchInput() {
     const searchInput = document.getElementById('searchInput');
@@ -440,7 +502,6 @@ function handleClearSearch() {
 
 // History management for undo/redo
 function saveState(action = 'action') {
-    // Clear redo stack when new action is performed
     state.history.redoStack = [];
 
     // Save current state to undo stack
@@ -459,9 +520,14 @@ function saveState(action = 'action') {
 
     updateUndoRedoButtons();
 
+    // MARK THAT USER HAS MADE MODIFICATIONS
+    state.hasModifications = true;
+    state.isAnonymousWork = !window.firebase?.auth?.currentUser;
+
     // Add auto-save trigger
     autoSave();
 }
+
 
 function undo() {
     if (state.history.undoStack.length === 0) return;
@@ -570,6 +636,7 @@ function updatePositionFilterButton() {
 
 // Data loading
 async function loadAllScoringFormats() {
+    await waitForFirebase();
     try {
         await Promise.all(cfg.formats.map(async format => {
             const docName = format.toLowerCase().replace(' ', '-'); // 'ppr', 'half-ppr', 'standard'
@@ -610,7 +677,7 @@ async function loadAllScoringFormats() {
         state.currentFormat = 'PPR';
         updateScoringButton('PPR');
     } catch (error) {
-        console.error('Firestore loading failed, falling back to local data:', error);
+        console.error('Firestore loading failed:', error);
         throw error;
     }
 }
@@ -619,28 +686,95 @@ async function initializeRankings() {
     const user = window.firebase?.auth?.currentUser;
 
     if (user) {
-        // User is signed in - try to load from cloud first
-        const cloudDataLoaded = await loadFromCloud();
-        if (cloudDataLoaded) {
-            console.log('Loaded rankings from cloud');
-            return; // Successfully loaded from cloud, we're done
+        console.log('User signed in, checking for existing work...');
+
+        // SINGLE BULLETPROOF CHECK: Does user have ANY existing work?
+        const hasExistingWork = await checkForAnyExistingUserData();
+        if (hasExistingWork) {
+            console.log('Found existing user work - loading from cloud...');
+            await loadFromCloud(); // Load whatever exists, even if minimal
+            return; // STOP HERE - protect existing work
         }
+
+        console.log('Confirmed: No existing user work found - safe to load fresh consensus');
     }
 
-    // No user or no cloud data - load from consensus
-    console.log('Loading fresh consensus rankings');
+    // Handle pending anonymous work for new sign-ins
+    if (window.pendingAnonymousWork) {
+        console.log('Restoring pending anonymous work...');
+        const savedWork = window.pendingAnonymousWork;
+        state.players = savedWork.players;
+        state.toggles = savedWork.toggles;
+        state.currentFormat = savedWork.currentFormat;
+        filterPlayers(); // Don't recalculate ranks for restored work
+        updateDynamicTitle();
+        syncToggleVisuals();
 
-    // Data should already be loaded from Firestore, just set up the players
+        if (user) {
+            await autoSave(); // Save to cloud for signed-in users
+            console.log('Anonymous work saved to new account!');
+            state.isAnonymousWork = false;
+            state.hasModifications = true;
+        } else {
+            state.isAnonymousWork = true;
+            state.hasModifications = true;
+        }
+
+        window.pendingAnonymousWork = null;
+        return; // STOP HERE - we have user's work
+    }
+
+    // ONLY load fresh consensus if we're certain there's no existing user work
     if (state.consensusData && state.consensusData[state.currentFormat]) {
         state.players = deepCopy(state.consensusData[state.currentFormat]);
-        recalculateRanks();
-        filterPlayers();
-    } else {
-        console.log('No consensus data loaded - loading from Firestore fallback...');
-        await loadPlayersFromFile();
+        setOriginalConsensusForCurrentFormat();
+        filterPlayers(); // Don't recalculate ranks for fresh consensus
     }
+
+    state.isAnonymousWork = !user;
+    state.hasModifications = false;
 }
 
+
+// Data protection need
+async function checkForAnyExistingUserData() {
+    const user = window.firebase?.auth?.currentUser;
+    if (!user) return false;
+
+    try {
+        const docRef = window.firebase.doc(window.firebase.db, 'rankings', user.uid);
+        const doc = await window.firebase.getDoc(docRef);
+
+        if (!doc.exists()) {
+            console.log('No user document found - safe to load fresh data');
+            return false;
+        }
+
+        const data = doc.data();
+
+        // Check for ANY indicators of user work
+        const hasPlayers = data?.players?.length > 0;
+        const hasToggles = data?.toggles && Object.keys(data.toggles).length > 0;
+        const hasLastUpdated = data?.lastUpdated;
+
+        // Even empty players array could mean user deleted everything intentionally
+        const hasAnyUserData = hasPlayers || hasToggles || hasLastUpdated;
+
+        if (hasAnyUserData) {
+            console.log(`Found existing user work: ${data.players?.length || 0} players, toggles: ${!!hasToggles}, lastUpdated: ${!!hasLastUpdated}`);
+            return true;
+        }
+
+        console.log('Document exists but contains no user work - safe to load fresh data');
+        return false;
+
+    } catch (error) {
+        console.error('Error checking for existing user data:', error);
+        // FAIL SAFE: If we can't check, assume work exists to prevent data loss
+        console.log('Cannot verify user data safety - assuming work exists to prevent loss');
+        return true;
+    }
+}
 
 function syncToggleVisuals() {
     const toggleIds = ['adpToggle', 'tiersToggle', 'riskToggle', 'notesToggle'];
@@ -676,7 +810,9 @@ function loadPlayersFromConsensus(format) {
     if (state.consensusData && state.consensusData[format]) {
         state.players = deepCopy(state.consensusData[format]);
         recalculateRanks();
+
         state.originalConsensus[format] = deepCopy(state.players);
+
         filterPlayers();
     }
 }
@@ -716,15 +852,17 @@ async function loadPlayersFromFile() {
                 overallRank: i + 1
             }));
 
+            // Store the skill players as consensus data
+            state.consensusData[format] = deepCopy(state.players);
+
             recalculateRanks();
-            state.originalConsensus[format] = deepCopy(state.players);
+
             filterPlayers();
         }
     } catch (error) {
         console.error('Error loading from Firestore:', error);
     }
 }
-
 
 function cycleScoringFormat() {
     const button = document.getElementById('scoringFormat');
@@ -733,15 +871,21 @@ function cycleScoringFormat() {
     const nextIndex = (currentIndex + 1) % scoringFormats.length;
     const newFormat = scoringFormats[nextIndex];
 
-    // Update button visual and data
     updateScoringButton(newFormat);
 
-    // THIS IS THE KEY PART - replicate the old handleScoringFormatChange logic:
     const previousFormat = state.currentFormat;
     state.currentFormat = newFormat;
 
+    // Set consensus for new format if not set
+    if (!state.originalConsensus[newFormat] && state.consensusData[newFormat]) {
+        state.originalConsensus[newFormat] = deepCopy(state.consensusData[newFormat]);
+    }
+
     if (isUnedited(previousFormat)) {
         loadPlayersFromConsensus(newFormat);
+
+        state.originalConsensus[newFormat] = deepCopy(state.players);
+
     } else {
         updateADPValues(newFormat);
     }
@@ -768,16 +912,29 @@ function updateScoringButton(format) {
 
     highlight.style.transform = positions[format];
 }
+
 function isUnedited(formatToCheck = null) {
     const checkFormat = formatToCheck || state.currentFormat;
     const original = state.originalConsensus[checkFormat];
 
-    if (!original || state.players.length !== original.length) return false;
+    if (!original || state.players.length !== original.length) {
+        console.log(`FAILED: ${!original ? 'No original data' : 'Length mismatch'}`);
+        return false;
+    }
 
-    return state.players.every((p, i) => {
+    for (let i = 0; i < state.players.length; i++) {
+        const p = state.players[i];
         const orig = original[i];
-        return Object.keys(p).every(key => p[key] === orig[key]);
-    });
+
+        for (const key of Object.keys(p)) {
+            if (key === 'adp') continue; // Skip ADP
+            if (p[key] !== orig[key]) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 function updateADPValues(format) {
@@ -963,7 +1120,6 @@ function addPlayer(playerId) {
     const playerToAdd = allPlayersData?.players?.find(p => p.id === playerId);
 
     if (!playerToAdd) {
-        console.error('Player not found:', playerId, 'in format:', state.currentFormat);
         return;
     }
 
@@ -1003,7 +1159,6 @@ function updatePlayerOrder() {
                 filterPlayers();
             }
         } else {
-            console.error('Player count mismatch:', newOrder.length, 'vs', state.players.length);
             filterPlayers();
         }
     } else {
@@ -1060,28 +1215,28 @@ const createRiskButton = (action, player) => {
 
 const createNotesIcon = (player) => {
     return `<button onclick="openNotesModal('${player.id}')" class="notes-icon bg-slate-600 border-2 border-slate-500 w-10 h-10 rounded text-white hover:bg-slate-700 transition-all duration-200 flex items-center justify-center" title="Edit notes">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                            </svg>
-                        </button>`;
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                </svg>
+            </button>`;
 };
 
 const createAddButton = (player) => {
     return `<button onclick="addPlayer('${player.id}')" class="bg-green-600 border-2 border-green-500 w-10 h-10 rounded text-white hover:bg-green-700 transition-all duration-200 flex items-center justify-center">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
-                            </svg>
-                        </button>`;
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
+                </svg>
+            </button>`;
 };
 
 function updateNotesPosition() {
     const isRiskDisabled = !state.toggles.risk;
     const isNotesEnabled = state.toggles.notes; // Check if notes are enabled
-    
+
     document.querySelectorAll('.notes-icon').forEach(icon => {
         // Only transform if notes are actually enabled (visible)
         if (isNotesEnabled && isRiskDisabled) {
-            icon.style.transform = 'translateX(24px)';
+            icon.style.transform = 'translateX(48px)';
         } else {
             icon.style.transform = 'translateX(0)';
         }
@@ -1118,7 +1273,7 @@ function renderPlayers() {
                             </div>
                         </div>
                     </div>
-                    <div class="notes-icon w-10 flex items-center flex-shrink-0">${createNotesIcon(p)}</div>
+                    <div class="w-10 flex items-center flex-shrink-0">${createNotesIcon(p)}</div>
                     <div class="w-10 flex items-center flex-shrink-0">${createRiskButton('action', p)}</div>
                 </div>
             </div>
@@ -1173,7 +1328,6 @@ function setupDragHandlers() {
 function initDrag(element, clientX, clientY) {
     // PREVENT DRAG IF ALREADY SCROLLING
     if (state.dragState.isScrolling) {
-        console.log('Blocked drag - scroll in progress');
         return;
     }
 
@@ -1209,7 +1363,6 @@ function initDrag(element, clientX, clientY) {
 
     // Make sure parent exists before inserting placeholder
     if (!element.parentNode) {
-        console.warn('Element has no parent - aborting drag');
         state.dragState.isDragging = false;
         return;
     }
@@ -1218,7 +1371,6 @@ function initDrag(element, clientX, clientY) {
     try {
         element.parentNode.insertBefore(state.dragState.placeholder, element);
     } catch (e) {
-        console.warn('Failed to insert placeholder:', e);
         state.dragState.isDragging = false;
         return;
     }
@@ -1573,9 +1725,7 @@ window.updateNotes = (id, notes) => {
 };
 
 window.addPlayer = addPlayer;
-
 window.deletePlayer = deletePlayer;
-
 window.openNotesModal = openNotesModal;
 
 
@@ -1620,35 +1770,33 @@ const autoSave = debounce(async () => {
         const docRef = window.firebase.doc(window.firebase.db, 'rankings', user.uid);
         await window.firebase.setDoc(docRef, data);
 
-        showSaveStatus('Saved');
     } catch (error) {
         console.error('Auto-save failed:', error);
-        showSaveStatus('Save failed');
     }
 }, 2000);
 
-// Optional: Save status indicator
-function showSaveStatus(message) {
-    // You can add a small status indicator if you want
-    console.log('Auto-save:', message);
+function signInWithGoogle() {
+    // Save current work to temporary storage before signing in
+    if (state.hasModifications && state.isAnonymousWork) {
+        console.log('Saving anonymous work before sign-in...');
+        localStorage.setItem('anonymousRankings', JSON.stringify({
+            players: state.players,
+            toggles: state.toggles,
+            currentFormat: state.currentFormat,
+            timestamp: Date.now()
+        }));
+    }
+
+    window.firebase.signInWithRedirect(window.firebase.auth, window.firebase.provider);
 }
 
-async function signInWithGoogle() {
-    try {
-        const result = await window.firebase.signInWithPopup(window.firebase.auth, window.firebase.provider);
-        console.log('Signed in:', result.user.displayName);
-    } catch (error) {
-        console.error('Sign in error:', error);
-        alert('Sign in failed: ' + error.message);
-    }
-}
 
 async function signOutUser() {
     try {
         await window.firebase.signOut(window.firebase.auth);
-        console.log('Signed out successfully');
+        location.reload();
     } catch (error) {
-        console.error('Sign out error:', error);
+        alert('Sign out failed: ' + error.message);
     }
 }
 
@@ -1664,45 +1812,55 @@ async function loadFromCloud() {
         if (docSnap.exists()) {
             const data = docSnap.data();
 
+            // Load ANY existing data, no matter how small
             if (data && Array.isArray(data.players)) {
+                console.log(`Loading cloud data (${data.players.length} players)`);
+
                 state.players = data.players;
 
-                // RESTORE TOGGLE STATES IF THEY EXIST
+                // Restore toggle states if they exist
                 if (data.toggles) {
                     state.toggles = { ...state.toggles, ...data.toggles };
                 }
 
                 // Update UI elements
-                const rankerNameElement = $('rankerName');
-                if (rankerNameElement) {
-                    rankerNameElement.value = data.rankerName || '';
-                }
-
                 if (data.scoringFormat && data.scoringFormat !== state.currentFormat) {
                     state.currentFormat = data.scoringFormat;
-                    updateScoringButton(data.scoringFormat);
+                    if (typeof updateScoringButton === 'function') {
+                        updateScoringButton(data.scoringFormat);
+                    }
                 }
 
+                state.originalConsensus[state.currentFormat] = deepCopy(state.players);
+
                 state.positionFilter = 'ALL';
-                updatePositionFilterButton();
+                if (typeof updatePositionFilterButton === 'function') {
+                    updatePositionFilterButton();
+                }
+
                 state.history.undoStack = [];
                 state.history.redoStack = [];
-                updateUndoRedoButtons();
+                if (typeof updateUndoRedoButtons === 'function') {
+                    updateUndoRedoButtons();
+                }
 
                 recalculateRanks();
                 filterPlayers();
-                updateDynamicTitle();
+                if (typeof updateDynamicTitle === 'function') updateDynamicTitle();
+                if (typeof syncToggleVisuals === 'function') syncToggleVisuals();
 
-                // APPLY LOADED TOGGLE STATES
-                syncToggleVisuals();
+                // Mark as loaded from cloud (not anonymous work)
+                state.isAnonymousWork = false;
+                state.hasModifications = false; // Changed to false - this is existing saved work
 
-                return true; // Successfully loaded
+                return true;
             }
         }
-        return false; // No data found
+
+        return false;
     } catch (error) {
-        console.error('Auto-load failed:', error);
-        return false; // Failed to load
+        console.error('Failed to load cloud data:', error);
+        return false;
     }
 }
 
@@ -1714,14 +1872,15 @@ function updateAuthUI(user) {
     const authText = document.getElementById('authText');
     const refreshBtn = document.getElementById('refreshConsensusBtn');
 
+    if (!authBtn) return; // Guard against missing elements
+
     if (user) {
-        // Change to sign out
+        // User is signed in
         authBtn.onclick = signOutUser;
         authIcon.innerHTML = '<path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" />';
         authIcon.setAttribute('fill', 'currentColor');
         authIcon.setAttribute('viewBox', '0 0 20 20');
 
-        // Mobile shows "Sign out", Desktop shows "Sign out" 
         authText.innerHTML = '<span class="md:hidden">Sign out</span><span class="hidden md:inline">Sign out</span>';
 
         // Show refresh consensus button
@@ -1729,29 +1888,25 @@ function updateAuthUI(user) {
             refreshBtn.style.display = 'flex';
         }
 
-        // Load cloud data when user signs in
-        loadFromCloud();
+        updateDynamicTitle(); // Update title with user's name
     } else {
-        // Change to sign in
+        // User is not signed in
         authBtn.onclick = signInWithGoogle;
         authIcon.innerHTML = '<path fill="#e5e5e5" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />';
         authIcon.setAttribute('viewBox', '0 0 48 48');
 
-        // Mobile shows "Sign in", Desktop shows "Sign in with Google"
         authText.innerHTML = '<span class="md:hidden">Sign in</span><span class="hidden md:inline">Sign in with Google</span>';
 
         // Hide refresh consensus button
         if (refreshBtn) {
             refreshBtn.style.display = 'none';
         }
-
-        // When signing out, load fresh consensus rankings
-        initializeRankings();
     }
 }
 
 window.updateAuthUI = updateAuthUI;
 window.refreshToExpertConsensus = refreshToExpertConsensus;
+window.signInWithGoogle = signInWithGoogle;
 
 
 // Printable generation
