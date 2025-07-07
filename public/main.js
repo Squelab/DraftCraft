@@ -40,7 +40,8 @@ const state = {
         isScrolling: false,
         wasOverDelete: false,
         currentScrollSpeed: 0,
-    }
+    },
+    isLoading: true,
 };
 
 function waitForFirebase() {
@@ -110,10 +111,9 @@ function setupToggleSwitches() {
             state.toggles[stateKey] = !state.toggles[stateKey];
 
             // Sync all visuals at once
-            syncToggleVisuals();
+            syncMenuVisuals();
 
-            // Auto-save the new toggle states
-            autoSave();
+            saveState();
         });
 
         // Apply initial functionality
@@ -125,6 +125,23 @@ function setupToggleSwitches() {
 // Apply display settings
 function applyDisplaySettings(setting, enabled) {
     switch (setting) {
+        case 'tiers':
+            if (enabled) {
+                document.body.classList.add('tiers-visible');
+                const hasPositionedBars = tierState.bars.some(tier => tier.abovePlayerId !== null);
+                if (!hasPositionedBars) {
+                    autoSpawnTierBars();
+                }
+                const sTierBar = document.getElementById('tier-s');
+                if (sTierBar) sTierBar.style.display = 'flex';
+                positionTierBars();
+            } else {
+                document.body.classList.remove('tiers-visible');
+                document.querySelectorAll('.tier-bar').forEach(bar => {
+                    bar.style.display = 'none';
+                });
+            }
+            break;
         case 'adp':
             document.querySelectorAll('span').forEach(el => {
                 if (el.textContent && el.textContent.includes('ADP:')) {
@@ -151,8 +168,6 @@ function applyDisplaySettings(setting, enabled) {
                 });
             }
             break;
-        case 'tiers':
-            break;
     }
 }
 
@@ -175,8 +190,7 @@ function updateDynamicTitle() {
 
     titleElement.textContent = `${titleName} ${year} ${format} Rankings`;
 
-    // Auto-save when format changes (only if user is signed in)
-    if (user) autoSave();
+    saveState();
 }
 
 
@@ -377,34 +391,101 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Wait a bit for Firebase auth to initialize if it exists
     setTimeout(async () => {
         await initializeRankings();
+        initializeTierSystem();
         setupToggleSwitches();
+        state.isLoading = false; // Mark as ready!
+        console.log('App fully loaded');
     }, 100);
 });
 
-function setOriginalConsensusForCurrentFormat() {
-    if (state.players && state.players.length > 0) {
-        state.originalConsensus[state.currentFormat] = deepCopy(state.players);
-        console.log(`Set originalConsensus for ${state.currentFormat}`);
+// Autosaving!
+const autoSave = debounce(async () => {
+    try {
+        // Wait for auth state to be ready
+        const user = await new Promise((resolve) => {
+            const unsubscribe = window.firebase.onAuthStateChanged(window.firebase.auth, (user) => {
+                unsubscribe();
+                resolve(user);
+            });
+        });
+
+        if (!user) {
+            console.log('No user - save skipped');
+            return;
+        }
+
+        const data = {
+            rankerName: user.displayName || user.email.split('@')[0],
+            year: cfg.year,
+            scoringFormat: state.currentFormat,
+            players: state.players,
+            toggles: state.toggles,
+            lastUpdated: new Date().toISOString(),
+            tierPositions: tierState.bars.map(tier => ({
+                id: tier.id,
+                abovePlayerId: tier.abovePlayerId,
+                belowPlayerId: tier.belowPlayerId
+            }))
+        };
+
+        const docRef = window.firebase.doc(window.firebase.db, 'rankings', user.uid);
+        await window.firebase.setDoc(docRef, data);
+        console.log('Saved successfully at', new Date().toLocaleTimeString());
+
+    } catch (error) {
+        console.error('AutoSave failed:', error);
     }
+}, 2000);
+
+window.autoSave = autoSave;
+
+// Get user every session
+async function getCurrentUser() {
+    return new Promise((resolve) => {
+        if (!window.firebase?.auth) {
+            resolve(null);
+            return;
+        }
+
+        const unsubscribe = window.firebase.onAuthStateChanged(window.firebase.auth, (user) => {
+            unsubscribe();
+            resolve(user);
+        });
+    });
 }
+
 
 function handleDraftClick() {
     // Use onAuthStateChanged to get the current auth state reliably
     window.firebase.onAuthStateChanged(window.firebase.auth, (user) => {
         if (user) {
-            // Get the current title
-            const titleElement = document.getElementById('dynamicTitle');
-            const currentTitle = titleElement ? titleElement.textContent : 'Your 2025 PPR Rankings';
+            // Build the title
+            let titleName;
+            if (user && user.displayName) {
+                const displayName = user.displayName;
+                const firstName = displayName.split(' ')[0];
+                titleName = firstName + "'s";
+            } else {
+                titleName = 'Your';
+            }
 
-            // Pass current rankings and title to draft room via localStorage
+            const currentTitle = `${titleName} ${cfg.year} ${state.currentFormat} Rankings`;
+
+            // Pass current rankings, title, toggle states, AND tier positions to draft room via localStorage
             localStorage.setItem('draftRankings', JSON.stringify({
                 players: state.players,
                 currentFormat: state.currentFormat,
                 title: currentTitle,
+                toggles: state.toggles, // Pass the toggle states!
+                tierPositions: tierState.bars.map(tier => ({
+                    id: tier.id,
+                    abovePlayerId: tier.abovePlayerId,
+                    belowPlayerId: tier.belowPlayerId
+                })), // Pass tier positions!
                 timestamp: Date.now()
             }));
             // User is signed in, open draft room in new tab
-            window.open('draft.html', '_blank');
+            window.open('draft', '_blank');
         } else {
             // No user signed in
             if (confirm('You must be signed in to enter the draft room.\n\nPlease sign in with Google first.')) {
@@ -413,6 +494,7 @@ function handleDraftClick() {
         }
     });
 }
+
 
 
 function refreshToExpertConsensus() {
@@ -438,7 +520,6 @@ function refreshToExpertConsensus() {
     // Reset consensus reference after refresh
 
     state.hasModifications = false;
-    autoSave();
 }
 
 function handleSearchInput() {
@@ -500,30 +581,29 @@ function handleClearSearch() {
     filterPlayers();
 }
 
-// History management for undo/redo
+// History management for undo/redo + autoSave call
 function saveState(action = 'action') {
-    state.history.redoStack = [];
+    if (!window.firebase?.auth?.currentUser) {
+        console.log('No auth - save skipped');
+        return;
+    }
 
+    state.history.redoStack = [];
     // Save current state to undo stack
     const snapshot = {
         players: deepCopy(state.players),
         action: action,
         timestamp: Date.now()
     };
-
     state.history.undoStack.push(snapshot);
-
     // Limit undo stack size
     if (state.history.undoStack.length > state.history.maxSize) {
         state.history.undoStack.shift();
     }
-
     updateUndoRedoButtons();
-
     // MARK THAT USER HAS MADE MODIFICATIONS
     state.hasModifications = true;
     state.isAnonymousWork = !window.firebase?.auth?.currentUser;
-
     // Add auto-save trigger
     autoSave();
 }
@@ -633,6 +713,9 @@ function updatePositionFilterButton() {
 
     btn.title = `Filter by position (${state.positionFilter})`;
 }
+function generatePlayerId(player) {
+    return `${player.name}-${player.position}`.toLowerCase().replace(/[^a-z]/g, '-').replace(/-+/g, '-');
+}
 
 // Data loading
 async function loadAllScoringFormats() {
@@ -652,7 +735,7 @@ async function loadAllScoringFormats() {
                     toggles: data.toggles,
                     players: allPlayers.map((p, i) => ({
                         ...p,
-                        id: p.id || `p${i}`,
+                        id: generatePlayerId(p),
                         risk: p.risk || 'Medium',
                         notes: p.notes || '',
                         originalRank: i + 1
@@ -666,7 +749,7 @@ async function loadAllScoringFormats() {
 
                 state.consensusData[format] = skillPlayers.map((p, i) => ({
                     ...p,
-                    id: p.id || `p${i}`,
+                    id: generatePlayerId(p),
                     risk: p.risk || 'Medium',
                     notes: p.notes || '',
                     overallRank: i + 1
@@ -674,29 +757,32 @@ async function loadAllScoringFormats() {
             }
         }));
 
-        state.currentFormat = 'PPR';
-        updateScoringButton('PPR');
     } catch (error) {
         console.error('Firestore loading failed:', error);
         throw error;
     }
+
+    cfg.formats.forEach(format => {
+        if (state.consensusData[format]) {
+            state.originalConsensus[format] = deepCopy(state.consensusData[format]);
+        }
+    });
 }
 
 async function initializeRankings() {
-    const user = window.firebase?.auth?.currentUser;
+    const user = await getCurrentUser();
 
     if (user) {
-        console.log('User signed in, checking for existing work...');
-
         // SINGLE BULLETPROOF CHECK: Does user have ANY existing work?
         const hasExistingWork = await checkForAnyExistingUserData();
         if (hasExistingWork) {
             console.log('Found existing user work - loading from cloud...');
-            await loadFromCloud(); // Load whatever exists, even if minimal
-            return; // STOP HERE - protect existing work
+            const success = await loadFromCloud(); // Load whatever exists
+            if (success) {
+                return; // STOP HERE
+            }
         }
-
-        console.log('Confirmed: No existing user work found - safe to load fresh consensus');
+        console.log('No existing user work found - safe to load fresh consensus');
     }
 
     // Handle pending anonymous work for new sign-ins
@@ -706,12 +792,11 @@ async function initializeRankings() {
         state.players = savedWork.players;
         state.toggles = savedWork.toggles;
         state.currentFormat = savedWork.currentFormat;
-        filterPlayers(); // Don't recalculate ranks for restored work
+        filterPlayers(); // *** CRITICAL: Make sure UI renders ***
         updateDynamicTitle();
-        syncToggleVisuals();
+        syncMenuVisuals();
 
         if (user) {
-            await autoSave(); // Save to cloud for signed-in users
             console.log('Anonymous work saved to new account!');
             state.isAnonymousWork = false;
             state.hasModifications = true;
@@ -721,18 +806,23 @@ async function initializeRankings() {
         }
 
         window.pendingAnonymousWork = null;
-        return; // STOP HERE - we have user's work
+        return; // STOP HERE
     }
 
     // ONLY load fresh consensus if we're certain there's no existing user work
     if (state.consensusData && state.consensusData[state.currentFormat]) {
         state.players = deepCopy(state.consensusData[state.currentFormat]);
-        setOriginalConsensusForCurrentFormat();
         filterPlayers(); // Don't recalculate ranks for fresh consensus
     }
 
     state.isAnonymousWork = !user;
     state.hasModifications = false;
+
+    for (const format of cfg.formats) {
+        if (state.consensusData[format] && !state.originalConsensus[format]) {
+            state.originalConsensus[format] = deepCopy(state.consensusData[format]);
+        }
+    }
 }
 
 
@@ -776,7 +866,8 @@ async function checkForAnyExistingUserData() {
     }
 }
 
-function syncToggleVisuals() {
+function syncMenuVisuals() {
+    // Sync toggle switches
     const toggleIds = ['adpToggle', 'tiersToggle', 'riskToggle', 'notesToggle'];
     const stateKeys = ['adp', 'tiers', 'risk', 'notes'];
 
@@ -788,7 +879,6 @@ function syncToggleVisuals() {
         if (toggle) {
             const circle = toggle.querySelector('div');
             if (circle) {
-                // Use inline styles for everything to avoid CSS conflicts
                 if (isEnabled) {
                     toggle.classList.add('toggle-enabled');
                     circle.style.left = 'auto';
@@ -798,8 +888,6 @@ function syncToggleVisuals() {
                     circle.style.right = 'auto';
                     circle.style.left = '0.25rem';
                 }
-
-                // Apply the functionality
                 applyDisplaySettings(stateKey, isEnabled);
             }
         }
@@ -817,62 +905,13 @@ function loadPlayersFromConsensus(format) {
     }
 }
 
-async function loadPlayersFromFile() {
-    const format = state.currentFormat || 'PPR';
-    const docName = format.toLowerCase().replace(' ', '-');
-
-    try {
-        const docRef = window.firebase.doc(window.firebase.db, 'expert-consensus', docName);
-        const docSnap = await window.firebase.getDoc(docRef);
-
-        if (docSnap.exists()) {
-            const d = docSnap.data();
-            const allPlayers = d.players || [];
-
-            state.allConsensusData[format] = {
-                toggles: d.toggles,
-                players: allPlayers.map((p, i) => ({
-                    ...p,
-                    id: p.id || `p${i}`,
-                    risk: p.risk || 'Medium',
-                    notes: p.notes || '',
-                    originalRank: i + 1
-                }))
-            };
-
-            const skillPlayers = allPlayers
-                .filter(p => cfg.skillPositions.includes(p.position))
-                .slice(0, cfg.maxPlayers);
-
-            state.players = skillPlayers.map((p, i) => ({
-                ...p,
-                id: p.id || `p${i}`,
-                risk: p.risk || 'Medium',
-                notes: p.notes || '',
-                overallRank: i + 1
-            }));
-
-            // Store the skill players as consensus data
-            state.consensusData[format] = deepCopy(state.players);
-
-            recalculateRanks();
-
-            filterPlayers();
-        }
-    } catch (error) {
-        console.error('Error loading from Firestore:', error);
-    }
-}
-
 function cycleScoringFormat() {
     const button = document.getElementById('scoringFormat');
-    const currentFormat = button.dataset.format || 'PPR';
+    const currentFormat = button.dataset.format || state.currentFormat || 'PPR';
     const currentIndex = scoringFormats.indexOf(currentFormat);
     const nextIndex = (currentIndex + 1) % scoringFormats.length;
     const newFormat = scoringFormats[nextIndex];
-
     updateScoringButton(newFormat);
-
     const previousFormat = state.currentFormat;
     state.currentFormat = newFormat;
 
@@ -881,71 +920,78 @@ function cycleScoringFormat() {
         state.originalConsensus[newFormat] = deepCopy(state.consensusData[newFormat]);
     }
 
-    if (isUnedited(previousFormat)) {
+    // Check if rankings match any expert consensus - if so, switch to new format's consensus
+    if (isUnedited()) {
         loadPlayersFromConsensus(newFormat);
-
-        state.originalConsensus[newFormat] = deepCopy(state.players);
-
     } else {
+        // Always preserve user's work and just update ADP values
         updateADPValues(newFormat);
     }
 
     updateDynamicTitle();
+    saveState('change scoring format');
 }
 
 function updateScoringButton(format) {
+    console.log('updateScoringButton called with:', format);
+    console.trace('Called from:');
+
     const button = document.getElementById('scoringFormat');
     const highlight = document.getElementById('formatHighlight');
 
-    // Add null checks
-    if (!button || !highlight) return;
+    if (!button || !highlight) {
+        console.log('Button or highlight not found');
+        return;
+    }
 
-    button.dataset.format = format; // This line is crucial!
+    console.log('Updating button to:', format);
+    button.dataset.format = format;
     button.title = `Scoring Format: ${format}`;
 
-    // Move highlight based on format
     const positions = {
-        'PPR': 'translateY(0)',           // top third
-        'Half PPR': 'translateY(100%)',   // middle third
-        'Standard': 'translateY(200%)'    // bottom third
+        'PPR': 'translateY(0)',
+        'Half PPR': 'translateY(100%)',
+        'Standard': 'translateY(200%)'
     };
 
     highlight.style.transform = positions[format];
+    console.log('Button updated, highlight position:', positions[format]);
 }
 
-function isUnedited(formatToCheck = null) {
-    const checkFormat = formatToCheck || state.currentFormat;
-    const original = state.originalConsensus[checkFormat];
+function isUnedited() {
+    // Check if current rankings match ANY expert consensus format
+    for (const format of cfg.formats) {
+        const originalConsensus = state.consensusData[format];
+        if (!originalConsensus) continue;
 
-    if (!original || state.players.length !== original.length) {
-        console.log(`FAILED: ${!original ? 'No original data' : 'Length mismatch'}`);
-        return false;
-    }
+        // Filter original consensus the same way as initialization
+        const filteredOriginal = originalConsensus
+            .filter(p => cfg.skillPositions.includes(p.position))
+            .slice(0, cfg.maxPlayers);
 
-    for (let i = 0; i < state.players.length; i++) {
-        const p = state.players[i];
-        const orig = original[i];
+        if (state.players.length !== filteredOriginal.length) continue;
 
-        for (const key of Object.keys(p)) {
-            if (key === 'adp') continue; // Skip ADP
-            if (p[key] !== orig[key]) {
-                return false;
-            }
+        // Check if the player lists match exactly (same order, same players)
+        const matches = state.players.every((player, index) =>
+            player.id === filteredOriginal[index].id
+        );
+
+        if (matches) {
+            return true; // Found a match with this format
         }
     }
-
-    return true;
+    return false; // Doesn't match any format
 }
 
 function updateADPValues(format) {
     if (!state.consensusData[format]) return;
 
     const adpMap = new Map(
-        state.consensusData[format].map(p => [`${p.name}-${p.team}`, p.adp])
+        state.consensusData[format].map(p => [generatePlayerId(p), p.adp]) 
     );
 
     state.players.forEach(player => {
-        const adp = adpMap.get(`${player.name}-${player.team}`);
+        const adp = adpMap.get(generatePlayerId(player)); 
         if (adp !== undefined) player.adp = adp;
     });
 
@@ -1011,6 +1057,11 @@ function filterPlayers() {
     }
 
     renderPlayers();
+
+    if (state.toggles.tiers) {
+        insertTierBars();
+        positionTierBars();
+    }
 }
 
 
@@ -1312,7 +1363,7 @@ function renderPlayers() {
     container.innerHTML = html.join('');
 
     setupDragHandlers();
-    syncToggleVisuals();
+    syncMenuVisuals();
 }
 
 // Drag and drop handling
@@ -1728,21 +1779,367 @@ window.addPlayer = addPlayer;
 window.deletePlayer = deletePlayer;
 window.openNotesModal = openNotesModal;
 
+// TIERS TIERS TIERS TIERS TIERS TIERS TIERS TIERS TIERS TIERS
 
-function downloadPrintable() {
-    // Get user info like the printable function does
-    const user = window.firebase?.auth?.currentUser;
-    let name = user ? (user.displayName || 'Your') : 'Your';
+// Tier bar colors
+const tierState = {
+    bars: [
+        { id: 'tier-a', label: 'A', color: '#E6A566', abovePlayerId: null, belowPlayerId: null },
+        { id: 'tier-b', label: 'B', color: '#C4D470', abovePlayerId: null, belowPlayerId: null },
+        { id: 'tier-c', label: 'C', color: '#8FBC8F', abovePlayerId: null, belowPlayerId: null },
+        { id: 'tier-d', label: 'D', color: '#87CEEB', abovePlayerId: null, belowPlayerId: null },
+        { id: 'tier-e', label: 'E', color: '#9370DB', abovePlayerId: null, belowPlayerId: null }, 
+        { id: 'tier-f', label: 'F', color: '#DDA0DD', abovePlayerId: null, belowPlayerId: null }  
+    ]
+};
 
-    // Add 's' if name doesn't already end with 's' (case-insensitive)
-    if (!name.toLowerCase().endsWith('s') && name.toLowerCase() !== 'your') {
-        name += 's';
+// Tier bar HTML generation
+function createTierBar(tier) {
+    return `
+        <div id="${tier.id}" class="tier-bar" style="background: ${tier.color}; display: none;">
+            <div class="tier-label">${tier.label}</div>
+        </div>
+    `;
+}
+
+// Insert tier bars into the players list
+function insertTierBars() {
+    const playersList = document.getElementById('playersList');
+
+    // Remove any existing tier bars first
+    document.querySelectorAll('.tier-bar').forEach(bar => bar.remove());
+
+    // Create S-tier
+    const sTierBar = `
+        <div id="tier-s" class="tier-bar tier-s-bar" style="background: #E8867C; display: none;">
+            <div class="tier-label">S</div>
+        </div>
+    `;
+    playersList.insertAdjacentHTML('afterbegin', sTierBar);
+
+    // Add other tier bars
+    tierState.bars.forEach(tier => {
+        playersList.insertAdjacentHTML('beforeend', createTierBar(tier));
+    });
+}
+
+// Position tier bars based on player tracking
+function positionTierBars() {
+    if (!state.toggles.tiers) return;
+
+    // Always show S-tier at the top when tiers are enabled
+    const sTierBar = document.getElementById('tier-s');
+    if (sTierBar) {
+        sTierBar.style.display = 'flex';
+        const playersList = document.getElementById('playersList');
+        if (playersList && playersList.firstChild !== sTierBar) {
+            playersList.insertBefore(sTierBar, playersList.firstChild);
+        }
     }
 
-    const scoring = state.currentFormat || 'PPR';
-    const backendFormat = scoring.replace(' ', '');
+    const visiblePlayerItems = Array.from(document.querySelectorAll('.player-item:not(.available-player)'));
+    
+    tierState.bars.forEach(tier => {
+        const tierBar = document.getElementById(tier.id);
+        if (!tierBar) return;
 
-    downloadFile(generatePrintableHTML(), `${name}${cfg.year}${backendFormat}Printable.html`, 'text/html');
+        let insertPosition = null;
+
+        if (state.positionFilter === 'ALL') {
+            let insertAfterIndex = -1;
+
+            if (tier.abovePlayerId && tier.belowPlayerId) {
+                const aboveIndex = visiblePlayerItems.findIndex(item => item.dataset.playerId === tier.abovePlayerId);
+                const belowIndex = visiblePlayerItems.findIndex(item => item.dataset.playerId === tier.belowPlayerId);
+
+                if (aboveIndex !== -1 && belowIndex !== -1 && belowIndex === aboveIndex + 1) {
+                    insertAfterIndex = aboveIndex;
+                } else if (aboveIndex !== -1) {
+                    insertAfterIndex = aboveIndex;
+                    if (aboveIndex + 1 < visiblePlayerItems.length) {
+                        tier.belowPlayerId = visiblePlayerItems[aboveIndex + 1].dataset.playerId;
+                    } else {
+                        tier.belowPlayerId = null;
+                    }
+                } else if (belowIndex !== -1) {
+                    insertAfterIndex = belowIndex - 1;
+                    if (belowIndex > 0) {
+                        tier.abovePlayerId = visiblePlayerItems[belowIndex - 1].dataset.playerId;
+                    } else {
+                        tier.abovePlayerId = null;
+                    }
+                } else {
+                    tierBar.style.display = 'none';
+                    return;
+                }
+            } else if (tier.abovePlayerId) {
+                const aboveIndex = visiblePlayerItems.findIndex(item => item.dataset.playerId === tier.abovePlayerId);
+                if (aboveIndex !== -1) {
+                    insertAfterIndex = aboveIndex;
+                }
+            } else if (tier.belowPlayerId) {
+                const belowIndex = visiblePlayerItems.findIndex(item => item.dataset.playerId === tier.belowPlayerId);
+                if (belowIndex !== -1) {
+                    insertAfterIndex = belowIndex - 1;
+                }
+            }
+
+            if (insertAfterIndex >= 0 && insertAfterIndex < visiblePlayerItems.length) {
+                insertPosition = visiblePlayerItems[insertAfterIndex];
+            }
+
+        } else {
+            // Position filtering logic (same as before)
+            const globalPlayerOrder = state.players;
+            
+            let aboveGlobalIndex = tier.abovePlayerId ? 
+                globalPlayerOrder.findIndex(p => p.id === tier.abovePlayerId) : -1;
+            let belowGlobalIndex = tier.belowPlayerId ? 
+                globalPlayerOrder.findIndex(p => p.id === tier.belowPlayerId) : -1;
+            
+            if (aboveGlobalIndex !== -1 || belowGlobalIndex !== -1) {
+                let targetGlobalIndex = -1;
+                
+                if (aboveGlobalIndex !== -1 && belowGlobalIndex !== -1) {
+                    targetGlobalIndex = aboveGlobalIndex;
+                } else if (aboveGlobalIndex !== -1) {
+                    targetGlobalIndex = aboveGlobalIndex;
+                } else {
+                    targetGlobalIndex = belowGlobalIndex - 1;
+                }
+                
+                let bestInsertIndex = -1;
+                let bestGlobalIndex = Infinity;
+                
+                visiblePlayerItems.forEach((item, visibleIndex) => {
+                    const playerId = item.dataset.playerId;
+                    const globalIndex = globalPlayerOrder.findIndex(p => p.id === playerId);
+                    
+                    if (globalIndex >= targetGlobalIndex && globalIndex < bestGlobalIndex) {
+                        bestGlobalIndex = globalIndex;
+                        bestInsertIndex = visibleIndex - 1;
+                    }
+                });
+                
+                if (bestInsertIndex === -1 && visiblePlayerItems.length > 0) {
+                    bestInsertIndex = visiblePlayerItems.length - 1;
+                }
+                
+                if (bestInsertIndex >= 0) {
+                    insertPosition = visiblePlayerItems[bestInsertIndex];
+                }
+            }
+        }
+
+        // Insert the tier bar
+        if (insertPosition) {
+            insertPosition.parentNode.insertBefore(tierBar, insertPosition.nextSibling);
+            tierBar.style.display = 'flex';
+        } else {
+            tierBar.style.display = 'none';
+        }
+    });
+}
+
+// Spawn every 28 on first load
+function autoSpawnTierBars() {
+    const playerItems = Array.from(document.querySelectorAll('.player-item:not(.available-player)'));
+    const tierLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
+    let tierIndex = 0;
+
+    // Clear existing positions
+    tierState.bars.forEach(tier => {
+        tier.abovePlayerId = null;
+        tier.belowPlayerId = null;
+    });
+
+    // Place tier bars every 28 players (positions 28, 56, 84, 112, 140, 168)
+    for (let i = 27; i < playerItems.length && tierIndex < tierLabels.length; i += 28) {
+        const tier = tierState.bars.find(t => t.label === tierLabels[tierIndex]);
+        if (tier && playerItems[i]) {
+            tier.abovePlayerId = playerItems[i].dataset.playerId;
+            tier.belowPlayerId = playerItems[i + 1] ? playerItems[i + 1].dataset.playerId : null;
+            tierIndex++;
+        }
+    }
+}
+
+// Handle tier bar dragging/positioning  
+function setupTierBarDragging() {
+    // Add drag handlers to tier bars when they're created
+    document.addEventListener('mousedown', handleTierBarMouseDown);
+    document.addEventListener('touchstart', handleTierBarTouchStart, { passive: true });
+}
+
+function handleTierBarMouseDown(e) {
+    const tierBar = e.target.closest('.tier-bar:not(.tier-s-bar)');
+    if (!tierBar || !state.toggles.tiers) return;
+
+    e.preventDefault();
+    startTierBarDrag(tierBar, e.clientX, e.clientY);
+
+    const onMouseMove = (e) => moveTierBarDrag(e.clientX, e.clientY);
+    const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        endTierBarDrag();
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+}
+
+function handleTierBarTouchStart(e) {
+    const tierBar = e.target.closest('.tier-bar:not(.tier-s-bar)');
+    if (!tierBar || !state.toggles.tiers) return;
+
+    const touch = e.touches[0];
+    startTierBarDrag(tierBar, touch.clientX, touch.clientY);
+}
+
+// Tier bar drag state
+const tierDragState = {
+    isDragging: false,
+    draggedBar: null,
+    placeholder: null,
+    startY: 0
+};
+
+function startTierBarDrag(tierBar, clientX, clientY) {
+    tierDragState.isDragging = true;
+    tierDragState.draggedBar = tierBar;
+    tierDragState.startY = clientY;
+
+    // Create placeholder
+    tierDragState.placeholder = tierBar.cloneNode(true);
+    tierDragState.placeholder.classList.add('tier-drag-placeholder');
+    tierDragState.placeholder.style.opacity = '0.5';
+
+    // Insert placeholder before dragged bar
+    tierBar.parentNode.insertBefore(tierDragState.placeholder, tierBar);
+
+    // Style the dragged bar
+    tierBar.classList.add('tier-dragging');
+    tierBar.style.position = 'fixed';
+    tierBar.style.zIndex = '1000';
+    tierBar.style.pointerEvents = 'none';
+
+    const rect = tierBar.getBoundingClientRect();
+    tierBar.style.left = rect.left + 'px';
+    tierBar.style.top = rect.top + 'px';
+    tierBar.style.width = rect.width + 'px';
+}
+
+function moveTierBarDrag(clientX, clientY) {
+    if (!tierDragState.isDragging || !tierDragState.draggedBar) return;
+
+    // Move the dragged bar
+    const deltaY = clientY - tierDragState.startY;
+    const rect = tierDragState.draggedBar.getBoundingClientRect();
+    tierDragState.draggedBar.style.top = (rect.top + deltaY) + 'px';
+    tierDragState.startY = clientY;
+
+    // Find drop target
+    tierDragState.draggedBar.style.pointerEvents = 'none';
+    const elementBelow = document.elementFromPoint(clientX, clientY);
+    tierDragState.draggedBar.style.pointerEvents = 'auto';
+
+    const targetPlayer = elementBelow?.closest('.player-item:not(.available-player)');
+    if (targetPlayer && tierDragState.placeholder) {
+        const targetRect = targetPlayer.getBoundingClientRect();
+        const insertAfter = clientY > targetRect.top + targetRect.height / 2;
+
+        if (insertAfter) {
+            targetPlayer.parentNode.insertBefore(tierDragState.placeholder, targetPlayer.nextSibling);
+        } else {
+            targetPlayer.parentNode.insertBefore(tierDragState.placeholder, targetPlayer);
+        }
+    }
+}
+
+function endTierBarDrag() {
+    if (!tierDragState.isDragging || !tierDragState.draggedBar) return;
+
+    const { draggedBar, placeholder } = tierDragState;
+
+    // Reset dragged bar styles
+    draggedBar.classList.remove('tier-dragging');
+    draggedBar.style.position = '';
+    draggedBar.style.zIndex = '';
+    draggedBar.style.left = '';
+    draggedBar.style.top = '';
+    draggedBar.style.width = '';
+    draggedBar.style.pointerEvents = '';
+
+    // Replace placeholder with dragged bar
+    if (placeholder && placeholder.parentNode) {
+        placeholder.parentNode.replaceChild(draggedBar, placeholder);
+
+        // Update tier bar anchors based on new position
+        updateTierBarAnchors(draggedBar);
+
+        saveState('move tier bar');
+    }
+
+    // Clear drag state
+    tierDragState.isDragging = false;
+    tierDragState.draggedBar = null;
+    tierDragState.placeholder = null;
+    tierDragState.startY = 0;
+}
+
+function updateTierBarAnchors(tierBar) {
+    const tierId = tierBar.id;
+    const tier = tierState.bars.find(t => t.id === tierId);
+    if (!tier) return;
+
+    const playerItems = Array.from(document.querySelectorAll('.player-item:not(.available-player)'));
+    const tierBarIndex = Array.from(tierBar.parentNode.children).indexOf(tierBar);
+
+    // Find the players before and after this tier bar
+    let abovePlayer = null;
+    let belowPlayer = null;
+
+    for (let i = tierBarIndex - 1; i >= 0; i--) {
+        const element = tierBar.parentNode.children[i];
+        if (element.classList.contains('player-item') && !element.classList.contains('available-player')) {
+            abovePlayer = element;
+            break;
+        }
+    }
+
+    for (let i = tierBarIndex + 1; i < tierBar.parentNode.children.length; i++) {
+        const element = tierBar.parentNode.children[i];
+        if (element.classList.contains('player-item') && !element.classList.contains('available-player')) {
+            belowPlayer = element;
+            break;
+        }
+    }
+
+    // Update tier anchors
+    tier.abovePlayerId = abovePlayer ? abovePlayer.dataset.playerId : null;
+    tier.belowPlayerId = belowPlayer ? belowPlayer.dataset.playerId : null;
+}
+
+// Add touch move and end handlers
+document.addEventListener('touchmove', (e) => {
+    if (tierDragState.isDragging) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        moveTierBarDrag(touch.clientX, touch.clientY);
+    }
+}, { passive: false });
+
+document.addEventListener('touchend', (e) => {
+    if (tierDragState.isDragging) {
+        endTierBarDrag();
+    }
+});
+
+// Initialize tier system
+function initializeTierSystem() {
+    insertTierBars();
+    setupTierBarDragging();
 }
 
 function downloadFile(content, filename, type) {
@@ -1752,28 +2149,6 @@ function downloadFile(content, filename, type) {
     a.click();
     URL.revokeObjectURL(a.href);
 }
-
-const autoSave = debounce(async () => {
-    const user = window.firebase?.auth?.currentUser;
-    if (!user) return;
-
-    try {
-        const data = {
-            rankerName: user.displayName || user.email.split('@')[0],
-            year: cfg.year,
-            scoringFormat: state.currentFormat,
-            players: state.players,
-            toggles: state.toggles,
-            lastUpdated: new Date().toISOString()
-        };
-
-        const docRef = window.firebase.doc(window.firebase.db, 'rankings', user.uid);
-        await window.firebase.setDoc(docRef, data);
-
-    } catch (error) {
-        console.error('Auto-save failed:', error);
-    }
-}, 2000);
 
 function signInWithGoogle() {
     // Save current work to temporary storage before signing in
@@ -1795,10 +2170,12 @@ async function signOutUser() {
     try {
         await window.firebase.signOut(window.firebase.auth);
         location.reload();
+        console.log('User signed out - rankings preserved');
     } catch (error) {
         alert('Sign out failed: ' + error.message);
     }
 }
+
 
 // Auto-load on sign in
 async function loadFromCloud() {
@@ -1826,33 +2203,47 @@ async function loadFromCloud() {
                 // Update UI elements
                 if (data.scoringFormat && data.scoringFormat !== state.currentFormat) {
                     state.currentFormat = data.scoringFormat;
-                    if (typeof updateScoringButton === 'function') {
-                        updateScoringButton(data.scoringFormat);
-                    }
+                    updateScoringButton(data.scoringFormat);
                 }
 
-                state.originalConsensus[state.currentFormat] = deepCopy(state.players);
+                // Restore tiers
+                if (data.tierPositions) {
+                    data.tierPositions.forEach(savedTier => {
+                        const tier = tierState.bars.find(t => t.id === savedTier.id);
+                        if (tier) {
+                            tier.abovePlayerId = savedTier.abovePlayerId;
+                            tier.belowPlayerId = savedTier.belowPlayerId;
+                        }
+                    });
+                }
+
+                if (!state.originalConsensus[state.currentFormat]) {
+                    await loadExpertConsensus(state.currentFormat);
+                }
 
                 state.positionFilter = 'ALL';
-                if (typeof updatePositionFilterButton === 'function') {
-                    updatePositionFilterButton();
-                }
+                updatePositionFilterButton();
 
                 state.history.undoStack = [];
                 state.history.redoStack = [];
-                if (typeof updateUndoRedoButtons === 'function') {
-                    updateUndoRedoButtons();
-                }
+                updateUndoRedoButtons();
 
                 recalculateRanks();
-                filterPlayers();
-                if (typeof updateDynamicTitle === 'function') updateDynamicTitle();
-                if (typeof syncToggleVisuals === 'function') syncToggleVisuals();
+
+                // *** CRITICAL: This was missing! ***
+                filterPlayers(); // This actually renders the UI
+
+                updateDynamicTitle();
+                syncMenuVisuals();
 
                 // Mark as loaded from cloud (not anonymous work)
                 state.isAnonymousWork = false;
-                state.hasModifications = false; // Changed to false - this is existing saved work
+                state.hasModifications = false;
 
+                // REFRESH ADP VALUES AFTER LOADING
+                await refreshADPValues();
+
+                console.log('Cloud data loaded and UI updated successfully');
                 return true;
             }
         }
@@ -1864,6 +2255,33 @@ async function loadFromCloud() {
     }
 }
 
+
+async function loadExpertConsensus(format) {
+    try {
+        const docName = format.toLowerCase().replace(' ', '-');
+        const docRef = window.firebase.doc(window.firebase.db, 'expert-consensus', docName);
+        const docSnap = await window.firebase.getDoc(docRef);
+        if (docSnap.exists()) {
+            state.originalConsensus[format] = docSnap.data().players;
+        }
+    } catch (error) {
+        console.error('Failed to load expert consensus:', error);
+    }
+}
+
+// Pull expert-consensus from firestore for cycleFormat()
+async function loadLatestConsensusData() {
+    await loadAllScoringFormats();
+}
+
+// ADP display values only
+async function refreshADPValues() {
+    await loadLatestConsensusData();
+
+    updateADPValues(state.currentFormat);
+
+    filterPlayers();
+}
 
 // Update the auth state listener to auto-load
 function updateAuthUI(user) {
@@ -1908,6 +2326,22 @@ window.updateAuthUI = updateAuthUI;
 window.refreshToExpertConsensus = refreshToExpertConsensus;
 window.signInWithGoogle = signInWithGoogle;
 
+// PRINTABLE PRINTABLE PRINTABLE PRINTABLE PRINTABLE PRINTABLE PRINTABLE
+function downloadPrintable() {
+    // Get user info like the printable function does
+    const user = window.firebase?.auth?.currentUser;
+    let name = user ? (user.displayName || 'Your') : 'Your';
+
+    // Add 's' if name doesn't already end with 's' (case-insensitive)
+    if (!name.toLowerCase().endsWith('s') && name.toLowerCase() !== 'your') {
+        name += 's';
+    }
+
+    const scoring = state.currentFormat || 'PPR';
+    const backendFormat = scoring.replace(' ', '');
+
+    downloadFile(generatePrintableHTML(), `${name}${cfg.year}${backendFormat}Printable.html`, 'text/html');
+}
 
 // Printable generation
 function generatePrintableHTML() {

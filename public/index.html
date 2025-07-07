@@ -99,7 +99,7 @@
                                     </button>
                                 </div>
                                 <div class="flex items-center gap-2 w-24 justify-end">
-                                    <label class="text-white text-sm">:(</label>
+                                    <label class="text-white text-sm">TIERS</label>
                                     <button id="tiersToggle" class="toggle-btn w-11 h-6 bg-slate-900 border-2 border-slate-700 hover:opacity-80 rounded-full relative transition-colors focus:outline-none" data-active="false">
                                         <div class="toggle-circle w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform duration-200 left-1"></div>
                                     </button>
@@ -130,7 +130,7 @@
                                 </div>
                                 <div class="relative z-10 flex-1 flex items-center justify-center" data-format="Half PPR">
                                     <div class="w-2 h-2 rounded-full border border-white relative overflow-hidden">
-                                        <div class="absolute left-0 top-0 w-[3.5px] h-2 bg-white"></div>
+                                        <div class="absolute left-0 top-0 w-[44%] h-2 bg-white"></div>
                                     </div>
                                 </div>
                                 <div class="relative z-10 flex-1 flex items-center justify-center" data-format="Standard">
@@ -166,7 +166,7 @@
                     <!-- Search Input (always visible, simpler approach) -->
                     <div class="flex-grow relative">
                         <input type="text" id="searchInput" placeholder="Search players & teams..." class="flex-grow h-10 bg-black border-2 border-slate-700 rounded-md px-3 py-2 text-gray-100 placeholder-gray-400 focus:outline-none w-full">
-                        <button id="clearSearch" class="fixed text-gray-400 hover:text-gray-200 z-10" style="display: none; right: 100px; top: 100px;">X</button>
+                        <button id="clearSearch" class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-200 hover:opacity-80 z-10" style="display: none;">X</button>
                     </div>
 
 
@@ -202,10 +202,10 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
         </svg>
     </div>
+    <!-- Rankings List -->
     <div class="container mx-auto p-2 max-w-6xl">
-        <!-- Rankings List -->
         <div class="bg-slate-800 rounded-lg shadow-xl p-3 flex-1 flex flex-col min-h-0">
-            <div id="playersList" class="flex-1 overflow-y-auto"></div>
+            <div id="playersList" class="flex-1 overflow-y-auto justify-between mb-2"></div>
         </div>
     </div>
 
@@ -272,11 +272,22 @@
                         localStorage.removeItem('anonymousRankings');
                     }
                 }
+            } else {
+                // User signed out - update state flags but preserve rankings
+                if (typeof window.state !== 'undefined') {
+                    window.state.isAnonymousWork = true;
+                    window.state.hasModifications = true;
+                }
             }
 
             // Update UI when ready
             if (typeof updateAuthUI === 'function') {
                 updateAuthUI(user);
+            }
+
+            // Update title when ready
+            if (typeof updateDynamicTitle === 'function') {
+                updateDynamicTitle();
             }
         });
 

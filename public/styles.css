@@ -89,15 +89,6 @@ header {
     transform: translateY(-60%) !important;
 }
 
-/* Player Item Styles */
-.player-item {
-    transition: transform 0.2s, opacity 0.2s;
-    margin: 0 0 4px 0;
-    border-radius: 0.5rem;
-    position: relative;
-    z-index: 2;
-}
-
 /* Drag & Drop Styles */
 .drag-area {
     cursor: move;
@@ -217,6 +208,13 @@ header button *,
     -webkit-touch-callout: none !important;
 }
 
+#dynamicTitle {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
 /* But allow text selection in inputs */
 input,
 textarea {
@@ -234,16 +232,6 @@ textarea {
     -ms-user-select: text;
     user-select: text;
     touch-action: auto;
-}
-
-/* Available Players */
-.available-player {
-    opacity: 1;
-    background: rgba(71, 85, 105, 0.3) !important;
-}
-
-.available-player:hover {
-    opacity: 0.8;
 }
 
 /* Notes Modal */
@@ -342,6 +330,92 @@ textarea {
     transform-origin: top right;
     animation: scaleIn 0.2s ease-out;
 }
+
+/*TIERS TIERS TIERS TIERS TIERS TIERS TIERS TIERS TIERS*/
+
+.tier-bar {
+    display: flex;
+    align-items: center;
+    height: 6px;
+    margin: 8px 0;
+    border-radius: 3px;
+    position: relative;
+    z-index: 5;
+}
+
+/* Individual tier glows */
+#tier-s {
+    filter: brightness(1.1) drop-shadow(0 0 6px rgba(232, 134, 124, 0.4)) drop-shadow(0 0 12px rgba(232, 134, 124, 0.4)) drop-shadow(0 6px 32px rgba(232, 134, 124, 0.4)) drop-shadow(0 12px 64px rgba(232, 134, 124, 0.4));
+    z-index: 1;
+}
+
+#tier-a {
+    filter: brightness(1.1) drop-shadow(0 0 6px rgba(230, 165, 102, 0.4)) drop-shadow(0 0 12px rgba(230, 165, 102, 0.4)) drop-shadow(0 6px 32px rgba(230, 165, 102, 0.4)) drop-shadow(0 12px 64px rgba(230, 165, 102, 0.4));
+    z-index: 1;
+}
+
+#tier-b {
+    filter: brightness(1.1) drop-shadow(0 0 6px rgba(196, 212, 112, 0.4)) drop-shadow(0 0 12px rgba(196, 212, 112, 0.4)) drop-shadow(0 6px 32px rgba(196, 212, 112, 0.4)) drop-shadow(0 12px 64px rgba(196, 212, 112, 0.4));
+    z-index: 1;
+}
+
+#tier-c {
+    filter: brightness(1.1) drop-shadow(0 0 6px rgba(143, 188, 143, 0.4)) drop-shadow(0 0 12px rgba(143, 188, 143, 0.4)) drop-shadow(0 6px 32px rgba(143, 188, 143, 0.4)) drop-shadow(0 12px 64px rgba(143, 188, 143, 0.4));
+    z-index: 1;
+}
+
+#tier-d {
+    filter: brightness(1.1) drop-shadow(0 0 6px rgba(135, 206, 235, 0.4)) drop-shadow(0 0 12px rgba(135, 206, 235, 0.4)) drop-shadow(0 6px 32px rgba(135, 206, 235, 0.4)) drop-shadow(0 12px 64px rgba(135, 206, 235, 0.4));
+    z-index: 1;
+}
+
+#tier-e {
+    filter: brightness(1.1) drop-shadow(0 0 6px rgba(147, 112, 219, 0.4)) drop-shadow(0 0 12px rgba(147, 112, 219, 0.4)) drop-shadow(0 6px 32px rgba(147, 112, 219, 0.4)) drop-shadow(0 12px 64px rgba(147, 112, 219, 0.4));
+    z-index: 1;
+}
+
+#tier-f {
+    filter: brightness(1.1) drop-shadow(0 0 6px rgba(221, 160, 221, 0.4)) drop-shadow(0 0 12px rgba(221, 160, 221, 0.4)) drop-shadow(0 6px 32px rgba(221, 160, 221, 0.4)) drop-shadow(0 12px 64px rgba(221, 160, 221, 0.4));
+    z-index: 1;
+}
+
+.tier-label {
+    font-weight: bold;
+    font-size: 18px;
+    color: #000;
+    padding: 0 12px;
+    text-shadow: 1px 1px 2px rgba(255,255,255,0.3);
+    display: none;
+}
+
+.tier-s-bar {
+    margin-top: 0;
+}
+
+body.tiers-visible .tier-bar {
+    display: flex;
+}
+
+.tier-bar:not(.tier-s-bar) {
+    cursor: move; 
+}
+
+.tier-bar:not(.tier-s-bar):active {
+    cursor: grabbing; 
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .player-item:hover,
+    .tier-bar:hover {
+        transform: scale(1.01);
+    }
+}
+
+
+
+
+
+
 
 @keyframes scaleIn {
     from {
@@ -469,6 +543,7 @@ footer .text-gray-100 {
 .player-item {
     position: relative;
     transition: all 0.3s ease;
+    z-index: 2;
 }
 
 /* Glassmorphism for player cards */
@@ -480,12 +555,11 @@ footer .text-gray-100 {
     background-color: rgba(42, 42, 42, 0.05);
     backdrop-filter: blur(18px) saturate(240%);
     -webkit-backdrop-filter: blur(18px) saturate(240%);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow:
-        0 7px 22px 0 rgba(0, 0, 0, 0.45),
-        0 14px 44px 0 rgba(0, 0, 0, 0.275),
-        0 3px 10px 0 rgba(0, 0, 0, 0.35),
-        0 0 0 0.5px rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 1);
+}
+
+.player-item:not(:has(+ .tier-bar)) {
+    box-shadow: 0 7px 22px 0 rgba(0, 0, 0, 0.45), 0 14px 44px 0 rgba(0, 0, 0, 0.275), 0 3px 10px 0 rgba(0, 0, 0, 0.35), 0 0 0 0.5px rgba(255, 255, 255, 0.05);
 }
 
 .player-item::before {
@@ -510,42 +584,35 @@ footer .text-gray-100 {
     pointer-events: none;
 }
 
-/* Hover effect */
-@media (hover: hover) and (pointer: fine) {
-    .player-item:hover {
-        transform: scale(1.01);
-    }
-}
-
 /* Color overrides - just the left border for now */
 .player-item.bg-blue-900\/50 {
-    background: rgba(59, 130, 246, 0.07);
-    border-color: rgba(59, 130, 246, 0.6);
+    background: rgba(59, 130, 246, 0.09);
+    border-color: rgba(59, 130, 246, 1);
 }
 
 .player-item.bg-green-900\/50 {
-    background: rgba(34, 197, 94, 0.07);
-    border-color: rgba(34, 197, 94, 0.6);
+    background: rgba(34, 197, 94, 0.09);
+    border-color: rgba(34, 197, 94, 1);
 }
 
 .player-item.bg-orange-900\/50 {
-    background: rgba(249, 115, 22, 0.07);
-    border-color: rgba(249, 115, 22, 0.6);
+    background: rgba(249, 115, 22, 0.09);
+    border-color: rgba(249, 115, 22, 1);
 }
 
 .player-item.bg-purple-900\/50 {
-    background: rgba(147, 51, 234, 0.07);
-    border-color: rgba(147, 51, 234, 0.6);
+    background: rgba(147, 51, 234, 0.09);
+    border-color: rgba(147, 51, 234, 1);
 }
 
 .player-item.bg-pink-900\/50 {
-    background: rgba(236, 72, 153, 0.07);
-    border-color: rgba(236, 72, 153, 0.6);
+    background: rgba(236, 72, 153, 0.09);
+    border-color: rgba(236, 72, 153, 1);
 }
 
 .player-item.bg-gray-700\/50 {
-    background: rgba(156, 163, 175, 0.07);
-    border-color: rgba(156, 163, 175, 0.6);
+    background: rgba(156, 163, 175, 0.09);
+    border-color: rgba(156, 163, 175, 1);
 }
 
 /* Frosted effect for available players */
@@ -553,7 +620,7 @@ footer .text-gray-100 {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%), rgba(71, 85, 105, 0.2) !important;
     backdrop-filter: blur(8px) saturate(150%);
     -webkit-backdrop-filter: blur(8px) saturate(150%);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 1);
     opacity: 0.7;
 }
 
