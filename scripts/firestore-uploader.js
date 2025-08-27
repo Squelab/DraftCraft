@@ -24,7 +24,7 @@ async function fetchPlayerData(format) {
   try {
     console.log(`Fetching ${format} data...`);
     const response = await axios.get(`${API_BASE_URL}/${FORMATS[format]}`, {
-      timeout: 30000 // 30 second timeout
+      timeout: 60000 // 60 second timeout
     });
     
     if (response.data && response.data.players) {
