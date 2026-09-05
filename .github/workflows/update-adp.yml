@@ -14,22 +14,71 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: 'scripts/package.json'
+          node-version: '20'
 
-      - name: Install dependencies
-        working-directory: ./scripts
-        run: npm install
-        
-      - name: Run Firestore uploader
-        working-directory: ./scripts
+      - name: Install axios and firebase-admin
+        run: npm install axios firebase-admin
+
+      - name: Run Direct API Uploader
         env:
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
-        run: npm run upload
+        run: |
+          node -e "
+          const admin = require('firebase-admin');
+          const axios = require('axios');
+
+          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            projectId: serviceAccount.project_id
+          });
+
+          const db = admin.firestore();
+          const FORMATS = { 'PPR': 1, 'Half PPR': 0.5, 'Standard': 0 };
+
+          async function main() {
+            console.log('🚀 Running Direct FantasyCalc API Fetcher...');
+            for (const [formatName, pprValue] of Object.entries(FORMATS)) {
+              try {
+                console.log('Fetching ' + formatName + ' directly from FantasyCalc...');
+                const url = 'https://api.fantasycalc.com/values/current?isDynasty=false&numQbs=1&numTeams=12&ppr=' + pprValue;
+                const response = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 });
+                
+                const apiPlayers = response.data;
+                const mappedPlayers = apiPlayers.map((item, index) => {
+                  const p = item.player || {};
+                  const rank = item.overallRank || (index + 1);
+                  return {
+                    id: 'adp_' + rank,
+                    name: p.name || 'Unknown',
+                    team: p.maybeTeam || p.mTeam || 'FA',
+                    position: p.position || 'FLEX',
+                    overallRank: rank,
+                    positionRank: item.positionRank || rank,
+                    adp: parseFloat(item.adp) || rank,
+                    risk: 'Medium',
+                    notes: ''
+                  };
+                });
+
+                const docRef = db.collection('expert-consensus').doc(formatName.toLowerCase().replace(/\s+/g, '-'));
+                await docRef.set({
+                  format: formatName,
+                  players: mappedPlayers,
+                  toggles: { adp: true, tiers: false, risk: true, notes: true },
+                  lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+                  count: mappedPlayers.length,
+                  source: 'fantasycalc-api'
+                });
+                console.log('✅ Updated ' + formatName + ' with ' + mappedPlayers.length + ' players.');
+              } catch (err) {
+                console.error('❌ Failed ' + formatName + ':', err.message);
+                process.exitCode = 1;
+              }
+            }
+          }
+          main();
+          "
