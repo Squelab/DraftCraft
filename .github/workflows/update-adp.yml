@@ -2,8 +2,9 @@ name: Update ADP Data to Firestore
 
 on:
   schedule:
-    # Run every 48 hours
-    - cron: '0 */48 * * *'
+    # Note: Cron hours max out at 0-23 in Unix cron syntax.
+    # Use '0 0 */2 * *' for every 2 days.
+    - cron: '0 0 */2 * *'
   workflow_dispatch: # Allows manual triggering from GitHub UI
 
 permissions:
@@ -27,7 +28,9 @@ jobs:
           
       - name: Install dependencies
         working-directory: ./scripts
-        run: npm install
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
         
       - name: Run Firestore uploader
         working-directory: ./scripts
