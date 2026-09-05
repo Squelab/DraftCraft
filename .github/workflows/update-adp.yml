@@ -28,9 +28,7 @@ jobs:
           
       - name: Install dependencies
         working-directory: ./scripts
-        run: |
-          npm install
-          npx playwright install --with-deps chromium
+        run: npm install
         
       - name: Run Firestore uploader
         working-directory: ./scripts
