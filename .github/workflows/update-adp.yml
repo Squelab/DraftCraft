@@ -2,10 +2,8 @@ name: Update ADP Data to Firestore
 
 on:
   schedule:
-    # Note: Cron hours max out at 0-23 in Unix cron syntax.
-    # Use '0 0 */2 * *' for every 2 days.
     - cron: '0 0 */2 * *'
-  workflow_dispatch: # Allows manual triggering from GitHub UI
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -35,16 +33,3 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
         run: npm run upload
-        
-      - name: Report success
-        if: success()
-        run: |
-          echo "✅ ADP data successfully updated in Firestore"
-          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M UTC")"
-          
-      - name: Report failure
-        if: failure()
-        run: |
-          echo "❌ Failed to update ADP data in Firestore"
-          echo "Check logs above for details"
-          exit 1
