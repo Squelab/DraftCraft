@@ -1,7 +1,6 @@
 const admin = require('firebase-admin');
 const axios = require('axios');
 
-// Initialize Firebase Admin
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
   admin.initializeApp({
@@ -12,7 +11,6 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// Formats map to FantasyCalc PPR query parameter (1 = PPR, 0.5 = Half PPR, 0 = Standard)
 const FORMATS = {
   'PPR': 1,
   'Half PPR': 0.5,
@@ -34,7 +32,6 @@ async function fetchPlayerData(formatName, pprValue) {
       throw new Error(`Invalid or empty response for ${formatName}`);
     }
 
-    // Map FantasyCalc response to your application's schema
     const mappedPlayers = apiPlayers.map((item, index) => {
       const playerObj = item.player || {};
       const rank = item.overallRank || (index + 1);
@@ -55,12 +52,7 @@ async function fetchPlayerData(formatName, pprValue) {
     console.log(`✅ ${formatName}: ${mappedPlayers.length} players fetched`);
     return {
       players: mappedPlayers,
-      toggles: {
-        adp: true,
-        tiers: false,
-        risk: true,
-        notes: true
-      }
+      toggles: { adp: true, tiers: false, risk: true, notes: true }
     };
   } catch (error) {
     console.error(`❌ Error fetching ${formatName} data:`, error.message);
@@ -71,7 +63,6 @@ async function fetchPlayerData(formatName, pprValue) {
 async function uploadToFirestore(format, data) {
   try {
     console.log(`Uploading ${format} to Firestore...`);
-    
     const docRef = db.collection('expert-consensus').doc(format.toLowerCase().replace(/\s+/g, '-'));
     
     const firestoreData = {
@@ -85,7 +76,6 @@ async function uploadToFirestore(format, data) {
     
     await docRef.set(firestoreData);
     console.log(`✅ ${format}: ${data.players.length} players uploaded to Firestore`);
-    
   } catch (error) {
     console.error(`❌ Error uploading ${format} to Firestore:`, error.message);
     throw error;
@@ -94,53 +84,27 @@ async function uploadToFirestore(format, data) {
 
 async function main() {
   console.log('🚀 Starting ADP data update...');
-  
   try {
     const results = [];
-    
     for (const [formatName, pprValue] of Object.entries(FORMATS)) {
       try {
         const data = await fetchPlayerData(formatName, pprValue);
         await uploadToFirestore(formatName, data);
-        
-        results.push({
-          format: formatName,
-          success: true,
-          count: data.players.length
-        });
-        
+        results.push({ format: formatName, success: true, count: data.players.length });
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
       } catch (error) {
         console.error(`Failed to process ${formatName}:`, error.message);
-        results.push({
-          format: formatName,
-          success: false,
-          error: error.message
-        });
+        results.push({ format: formatName, success: false, error: error.message });
       }
     }
-    
-    console.log('\n📊 Summary:');
-    results.forEach(result => {
-      if (result.success) {
-        console.log(`✅ ${result.format}: ${result.count} players updated`);
-      } else {
-        console.log(`❌ ${result.format}: Failed - ${result.error}`);
-      }
-    });
     
     const successful = results.filter(r => r.success).length;
-    const total = results.length;
-    
-    if (successful === total) {
-      console.log(`\n🎉 All ${total} formats updated successfully!`);
+    if (successful === results.length) {
+      console.log(`\n🎉 All ${results.length} formats updated successfully!`);
       process.exit(0);
     } else {
-      console.log(`\n⚠️  ${successful}/${total} formats updated successfully`);
       process.exit(1);
     }
-    
   } catch (error) {
     console.error('💥 Fatal error:', error.message);
     process.exit(1);
