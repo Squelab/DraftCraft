@@ -1,40 +1,69 @@
-// scripts/firestore-uploader.js
 const admin = require('firebase-admin');
 const axios = require('axios');
 
 // Initialize Firebase Admin
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  projectId: serviceAccount.project_id
-});
+if (!admin.apps.length) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: serviceAccount.project_id
+  });
+}
 
 const db = admin.firestore();
 
-// Your API endpoints
-const API_BASE_URL = 'https://adp-server.onrender.com/api/players';
+// Formats map to FantasyCalc PPR query parameter (1 = PPR, 0.5 = Half PPR, 0 = Standard)
 const FORMATS = {
-  'PPR': 'ppr',
-  'Half PPR': 'halfppr', 
-  'Standard': 'standard'
+  'PPR': 1,
+  'Half PPR': 0.5,
+  'Standard': 0
 };
 
-async function fetchPlayerData(format) {
+async function fetchPlayerData(formatName, pprValue) {
   try {
-    console.log(`Fetching ${format} data...`);
-    const response = await axios.get(`${API_BASE_URL}/${FORMATS[format]}`, {
-      timeout: 60000 // 60 second timeout
-    });
+    console.log(`Fetching ${formatName} data from FantasyCalc API...`);
+    const url = `https://api.fantasycalc.com/values/current?isDynasty=false&numQbs=1&numTeams=12&ppr=${pprValue}`;
     
-    if (response.data && response.data.players) {
-      console.log(`✅ ${format}: ${response.data.players.length} players fetched`);
-      return response.data;
-    } else {
-      throw new Error(`Invalid response format for ${format}`);
+    const response = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+
+    const apiPlayers = response.data;
+    if (!Array.isArray(apiPlayers) || apiPlayers.length === 0) {
+      throw new Error(`Invalid or empty response for ${formatName}`);
     }
+
+    // Map FantasyCalc response to your application's schema
+    const mappedPlayers = apiPlayers.map((item, index) => {
+      const playerObj = item.player || {};
+      const rank = item.overallRank || (index + 1);
+      
+      return {
+        id: `adp_${rank}`,
+        name: playerObj.name || 'Unknown',
+        team: playerObj.maybeTeam || playerObj.mTeam || 'FA',
+        position: playerObj.position || 'FLEX',
+        overallRank: rank,
+        positionRank: item.positionRank || rank,
+        adp: parseFloat(item.adp) || rank,
+        risk: 'Medium',
+        notes: ''
+      };
+    });
+
+    console.log(`✅ ${formatName}: ${mappedPlayers.length} players fetched`);
+    return {
+      players: mappedPlayers,
+      toggles: {
+        adp: true,
+        tiers: false,
+        risk: true,
+        notes: true
+      }
+    };
   } catch (error) {
-    console.error(`❌ Error fetching ${format} data:`, error.message);
+    console.error(`❌ Error fetching ${formatName} data:`, error.message);
     throw error;
   }
 }
@@ -43,21 +72,15 @@ async function uploadToFirestore(format, data) {
   try {
     console.log(`Uploading ${format} to Firestore...`);
     
-    // Store in collection 'expert-consensus' with document name as format
-    const docRef = db.collection('expert-consensus').doc(format.toLowerCase().replace(' ', '-'));
+    const docRef = db.collection('expert-consensus').doc(format.toLowerCase().replace(/\s+/g, '-'));
     
     const firestoreData = {
       format: format,
       players: data.players,
-      toggles: data.toggles || {
-        adp: false,
-        tiers: false,
-        risk: true,
-        notes: true
-      },
+      toggles: data.toggles,
       lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
       count: data.players.length,
-      source: 'fantasyranker-adp-api'
+      source: 'fantasycalc-api'
     };
     
     await docRef.set(firestoreData);
@@ -75,13 +98,9 @@ async function main() {
   try {
     const results = [];
     
-    // Process each format
-    for (const [formatName, formatCode] of Object.entries(FORMATS)) {
+    for (const [formatName, pprValue] of Object.entries(FORMATS)) {
       try {
-        // Fetch data from API
-        const data = await fetchPlayerData(formatName);
-        
-        // Upload to Firestore
+        const data = await fetchPlayerData(formatName, pprValue);
         await uploadToFirestore(formatName, data);
         
         results.push({
@@ -90,7 +109,6 @@ async function main() {
           count: data.players.length
         });
         
-        // Small delay between requests
         await new Promise(resolve => setTimeout(resolve, 1000));
         
       } catch (error) {
@@ -103,7 +121,6 @@ async function main() {
       }
     }
     
-    // Summary
     console.log('\n📊 Summary:');
     results.forEach(result => {
       if (result.success) {
@@ -130,7 +147,6 @@ async function main() {
   }
 }
 
-// Run the script
 if (require.main === module) {
   main();
 }
